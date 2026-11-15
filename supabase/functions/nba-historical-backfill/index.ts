@@ -25,7 +25,7 @@ function playerRows(boxPlayers: any[]) {
     for (const category of group.statistics ?? []) {
       for (const item of category.athletes ?? []) {
         const athlete = item.athlete ?? {};
-        if (!athlete.id || item.didNotPlay === true || item.reason) continue;
+        if (!athlete.id || item.didNotPlay === true) continue;
         const names = Array.isArray(category.names) ? category.names : [];
         const values = Array.isArray(item.stats) ? item.stats : [];
         if (!values.length) continue;
