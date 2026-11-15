@@ -5,6 +5,7 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
+function normalizeTeamAbbr(value: unknown) { const abbr = String(value ?? "").toUpperCase(); return abbr === "GS" ? "GSW" : abbr; }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function sha256(value: string) {
@@ -95,7 +96,7 @@ Deno.serve(async (req: Request) => {
         const teamIds: Record<string, string> = {};
         for (const item of [home, away]) {
           const team = item.team;
-          const abbreviation = String(team.abbreviation).toUpperCase();
+          const abbreviation = normalizeTeamAbbr(team.abbreviation);
           const row = { abbreviation, display_name: String(team.displayName ?? team.name ?? abbreviation), city: team.location ?? null };
           const { data: savedTeam, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id").single();
           if (error || !savedTeam) throw new Error("Game team upsert failed: " + error?.message);
@@ -105,8 +106,8 @@ Deno.serve(async (req: Request) => {
             if (mapError) throw new Error("Game team source mapping failed: " + mapError.message);
           }
         }
-        const homeAbbr = String(home.team.abbreviation).toUpperCase();
-        const awayAbbr = String(away.team.abbreviation).toUpperCase();
+        const homeAbbr = normalizeTeamAbbr(home.team.abbreviation);
+        const awayAbbr = normalizeTeamAbbr(away.team.abbreviation);
         const gameRow = {
           season: seasonYear(event.date), scheduled_start: new Date(event.date).toISOString(),
           home_team_id: teamIds[homeAbbr], away_team_id: teamIds[awayAbbr], status: "final",
