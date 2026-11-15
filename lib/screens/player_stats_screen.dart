@@ -119,7 +119,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
     final dropdownPlayerId = filteredPlayers.any((p) => p['id'] == selectedPlayerId) ? selectedPlayerId : null;
     final seasonGames = selectedSeason == null
         ? games
-        : games.where((g) => g['season'] == selectedSeason).toList();
+        : games.where((g) => g['season_start_year'] == selectedSeason).toList();
     return RefreshIndicator(
       onRefresh: () => _load(playerId: selectedPlayerId),
       child: ListView(
@@ -161,7 +161,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
               decoration: const InputDecoration(labelText: 'Temporada', border: OutlineInputBorder()),
               items: [
                 const DropdownMenuItem<int?>(value: null, child: Text('Todas las temporadas disponibles')),
-                ...seasons.map((s) => DropdownMenuItem<int?>(value: s, child: Text('${s}-${s + 1}'))),
+                ...seasons.map((s) => DropdownMenuItem<int?>(value: s, child: Text('${s}-${(s + 1).toString().substring(2)}'))),
               ],
               onChanged: (value) => setState(() => selectedSeason = value),
             ),
@@ -197,6 +197,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
                   _metric('AST', _fmt(_average('AST', seasonGames))),
                   _metric('STL', _fmt(_average('STL', seasonGames))),
                   _metric('BLK', _fmt(_average('BLK', seasonGames))),
+                  _metric('3PM', _fmt(_average('3PT', seasonGames))),
                   _metric('MIN', _fmt(_average('MIN', seasonGames))),
                 ],
               ),
