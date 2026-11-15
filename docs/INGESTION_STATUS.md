@@ -5,9 +5,11 @@
 - Provider: ESPN public NBA Site API.
 - Scoreboard function: `nba-scoreboard-sync` (schedule, game status, final scores).
 - Boxscore function: `nba-boxscore-sync` (team and player boxscores).
+- Historical backfill function: `nba-historical-backfill` (resumable daily scoreboard, final results, compact raw boxscore snapshots, team stats, and player stats for completed games).
 - Mobile read API: `nba-public-data` (allowlisted read-only response for games, teams, live scores, and final results).
 - Supabase project: `sjzfrrwbirnaoqqgxblv`.
-- Both functions are scheduled every 15 minutes with Supabase Cron (`pg_cron`) and `pg_net`.
+- Live scoreboard and boxscore functions are scheduled every 15 minutes with Supabase Cron (`pg_cron`) and `pg_net`.
+- Historical backfill uses a private cursor table (`historical_backfill_jobs`) and a separate 15-minute cron worker. It processes up to 7 dates per run, resumes from `next_date`, and recovers jobs left `running` for more than 20 minutes.
 - Boxscore collection checks in-progress and recently finished games (last 36 hours), limits a run to 30 games, and waits at least one second between ESPN summary requests.
 - Completed games are skipped after both team and player boxscore rows exist. In-progress games can generate successive snapshots to preserve live stat changes.
 - ESPN athlete IDs are mapped through `player_source_ids`; team IDs use `team_source_ids`.
@@ -36,21 +38,30 @@ Manual invocation through `pg_net` succeeded on 2026-11-15:
 - 1 raw boxscore snapshot saved per distinct payload hash.
 - Example player fields include minutes, points, field goals, three-pointers, free throws, rebounds, assists, steals, blocks, turnovers, fouls, and plus/minus.
 
-## Current verified database state (after validation)
+## Current verified database state (2026-11-15, during historical backfill)
 
-- 18 teams
-- 9 games
-- 25 player records
-- 44 accepted player-stat snapshots
-- 4 team-stat snapshots
-- 2 raw boxscore snapshots
-- 2 active cron jobs, each scheduled every 15 minutes
+- 30 canonical NBA teams (duplicate ESPN alias `GS` normalized to canonical `GSW`)
+- 61 games currently stored
+- 53 final game results currently stored
+- 221 player records
+- 277 player-game stat rows currently stored (repair pass is still running)
+- 110 team-game stat rows
+- 3 active cron jobs: live scoreboard, live boxscores, and historical backfill
 
-Counts may increase as live games progress. The player/team stat JSON preserves ESPN labels and raw values; a later normalization step will convert numeric strings and shooting splits into typed analytics columns or validated derived views.
+Counts may increase as the historical job advances. Current live data and historical data are stored in the same normalized tables, with ESPN IDs mapped separately.
+
+## Historical backfill progress
+
+- Target window: 2024-10-22 through 2026-06-30 (2024-25 and 2025-26 seasons).
+- The first 7-day batch successfully processed 52 completed games: 52 final results, 52 boxscore snapshots, and 104 team-stat rows; no ESPN summary issues were reported.
+- The first pass exposed a player filter bug: ESPN's `reason` field can be populated even when the player participated. The filter was corrected in backfill function version 6.
+- A repair pass is reprocessing the first 7 dates to fill missing player-game stats. It has already raised the table count from 70 to 277; completion is still being verified.
+- The main historical job is paused at 2024-10-29 until the repair pass finishes, then it will resume.
+- Each boxscore snapshot stores the compact game header and boxscore rather than full play-by-play, limiting storage growth on the Supabase Free tier.
 
 ## Current limitations and next work
 
-- The pipeline currently covers the current/recent scoreboard and boxscores; historical season backfill is not implemented.
+- Historical backfill is implemented and underway for the 2024-25 and 2025-26 seasons; remaining dates continue through the resumable cron job.
 - Player season averages, standings, injuries, lineups, and availability are not yet ingested.
 - ESPN is the operational source. NBA.com previously returned HTTP 403 from GitHub Actions, so it is not currently a reliable second source.
 - Supabase Free projects may pause after inactivity; scheduled jobs cannot run while the project is paused. No 24/7 guarantee is made.
