@@ -13,6 +13,77 @@ Deno.serve(async (req: Request) => {
   if (!SERVICE_KEY) return json({ error: "Server database credentials are not configured" }, 500);
   const supabase = createClient(PROJECT_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.action === "player_stats") {
+      const { data: statIndex, error: indexError } = await supabase
+        .from("player_game_stats").select("player_id,game_id")
+        .or("validation_status.is.null,validation_status.neq.rejected").limit(10000);
+      if (indexError) throw new Error("Player catalog query failed: " + indexError.message);
+      const gameSets = new Map<string, Set<string>>();
+      for (const row of statIndex ?? []) {
+        if (!gameSets.has(row.player_id)) gameSets.set(row.player_id, new Set());
+        gameSets.get(row.player_id)!.add(row.game_id);
+      }
+      const playerIds = [...gameSets.keys()];
+      const { data: playerRows, error: playersError } = playerIds.length
+        ? await supabase.from("players").select("id,display_name,position,active")
+            .in("id", playerIds).order("display_name", { ascending: true })
+        : { data: [], error: null };
+      if (playersError) throw new Error("Players query failed: " + playersError.message);
+      const playersOut = (playerRows ?? []).map((p: any) => ({
+        id: p.id, name: p.display_name, position: p.position,
+        active: p.active, games_count: gameSets.get(p.id)?.size ?? 0
+      }));
+      const playerId = typeof body?.player_id === "string" ? body.player_id : null;
+      let playerGamesOut: any[] = [];
+      let seasonsOut: number[] = [];
+      if (playerId && gameSets.has(playerId)) {
+        const { data: rows, error: rowsError } = await supabase
+          .from("player_game_stats")
+          .select("game_id,player_id,team_id,stats,captured_at")
+          .eq("player_id", playerId)
+          .or("validation_status.is.null,validation_status.neq.rejected")
+          .order("captured_at", { ascending: false }).limit(300);
+        if (rowsError) throw new Error("Selected player stats query failed: " + rowsError.message);
+        const uniqueRows = new Map<string, any>();
+        for (const row of rows ?? []) if (!uniqueRows.has(row.game_id)) uniqueRows.set(row.game_id, row);
+        const gameIds = [...uniqueRows.keys()];
+        const { data: gameRows, error: gameError } = gameIds.length
+          ? await supabase.from("games")
+              .select("id,season,scheduled_start,home_team_id,away_team_id,status")
+              .in("id", gameIds)
+          : { data: [], error: null };
+        if (gameError) throw new Error("Player games query failed: " + gameError.message);
+        const teamIds = [...new Set((gameRows ?? []).flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
+        const { data: teamRows, error: teamError } = teamIds.length
+          ? await supabase.from("teams").select("id,abbreviation,display_name").in("id", teamIds)
+          : { data: [], error: null };
+        if (teamError) throw new Error("Player teams query failed: " + teamError.message);
+        const gameById = new Map((gameRows ?? []).map((g: any) => [g.id, g]));
+        const teamById = new Map((teamRows ?? []).map((t: any) => [t.id, t]));
+        playerGamesOut = [...uniqueRows.values()].map((row: any) => {
+          const game = gameById.get(row.game_id);
+          const team = teamById.get(row.team_id);
+          const opponentId = game
+            ? (game.home_team_id === row.team_id ? game.away_team_id : game.home_team_id)
+            : null;
+          const opponent = opponentId ? teamById.get(opponentId) : null;
+          return {
+            game_id: row.game_id, game_date: game?.scheduled_start ?? row.captured_at,
+            season: game?.season ?? null, game_status: game?.status ?? null,
+            team_abbreviation: team?.abbreviation ?? "",
+            opponent_abbreviation: opponent?.abbreviation ?? "—",
+            stats: row.stats ?? {}
+          };
+        }).sort((a: any, b: any) => Date.parse(b.game_date) - Date.parse(a.game_date));
+        seasonsOut = [...new Set(playerGamesOut.map((g: any) => g.season).filter((v: any) => Number.isInteger(v)))].sort((a, b) => b - a);
+      }
+      return json({
+        ok: true, players: playersOut, selected_player_id: playerId,
+        player_games: playerGamesOut, seasons: seasonsOut,
+        meta: { players_with_stats: playersOut.length, player_games: playerGamesOut.length }
+      });
+    }
     const now = new Date();
     const from = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
     const to = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -56,7 +127,7 @@ Deno.serve(async (req: Request) => {
     const { data: statRows, error: statRowsError } = gameIds.length
       ? await supabase.from("player_game_stats")
         .select("game_id,player_id,team_id,stats,captured_at")
-        .in("game_id", gameIds).neq("validation_status", "rejected")
+        .in("game_id", gameIds).or("validation_status.is.null,validation_status.neq.rejected")
         .order("captured_at", { ascending: false }).limit(500)
       : { data: [], error: null };
     if (statRowsError) throw new Error("Player stats query failed: " + statRowsError.message);
