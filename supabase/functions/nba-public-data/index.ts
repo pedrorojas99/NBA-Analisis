@@ -15,10 +15,20 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}));
     if (body?.action === "player_stats") {
-      const { data: statIndex, error: indexError } = await supabase
-        .from("player_game_stats").select("player_id,game_id")
-        .or("validation_status.is.null,validation_status.neq.rejected").limit(10000);
-      if (indexError) throw new Error("Player catalog query failed: " + indexError.message);
+      // PostgREST may cap responses at 1,000 rows even when a larger limit is requested.
+      // Page through the full eligible stats index so players beyond the first page are not omitted.
+      const statIndex: any[] = [];
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error: indexError } = await supabase
+          .from("player_game_stats").select("player_id,game_id")
+          .or("validation_status.is.null,validation_status.neq.rejected")
+          .order("player_id", { ascending: true }).order("game_id", { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (indexError) throw new Error("Player catalog query failed: " + indexError.message);
+        statIndex.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
       const gameSets = new Map<string, Set<string>>();
       for (const row of statIndex ?? []) {
         if (!gameSets.has(row.player_id)) gameSets.set(row.player_id, new Set());
