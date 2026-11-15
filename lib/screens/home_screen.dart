@@ -17,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool nbaLoading = true;
   String? nbaError;
   DateTime? nbaUpdatedAt;
-  Map<String, dynamic> nbaMeta = {};
+  Map<String, dynamic> nbaMeta = {};\n  List<NbaPlayerGameStat> nbaPlayerStats = [];
   List<Prediction> predictions = [];
   bool loading = true;
 
@@ -137,6 +137,28 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
         _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
       ...nbaGames.map(_nbaGameCard),
+      const SizedBox(height: 8),
+      _section('Estadísticas individuales recientes'),
+      if (nbaPlayerStats.isEmpty && !nbaLoading)
+        _empty('Todavía no hay estadísticas individuales para los partidos recientes. Se mostrarán cuando ESPN y la sincronización las registren.'),
+      ...nbaPlayerStats.take(20).map((p) => Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: ListTile(
+          title: Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text('${p.teamAbbreviation} · ${p.gameDate.toLocal().toString().substring(0, 10)}'
+              ' · 3PT: ${p.value('3PT')}'),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('${p.value('PTS')} PTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              Text('${p.value('REB')} REB · ${p.value('AST')} AST',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+      )),
+
     ]),
   );
 
