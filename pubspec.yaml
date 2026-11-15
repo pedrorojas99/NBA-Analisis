@@ -1,13 +1,14 @@
 name: nba_analytics
 description: NBA Analytics - registro verificable de pronosticos y evaluacion del modelo.
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.9.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.3.2
+  supabase_flutter: 2.18.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
