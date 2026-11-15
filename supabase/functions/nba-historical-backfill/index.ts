@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
     const issues: string[] = [];
     while (cursor <= end && datesChecked < maxDays) {
       const key = dateKey(cursor);
-      const response = await fetch(`${BASE}/scoreboard?dates=${key}&limit=1000`, { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000) });
+      const response = await fetch(`${BASE}/scoreboard?dates=${key}&limit=1000`, { headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 data-ingestion" }, signal: AbortSignal.timeout(20000) });
       if (!response.ok) throw new Error(`ESPN scoreboard ${key} HTTP ${response.status}`);
       const payload = await response.json();
       const events = Array.isArray(payload.events) ? payload.events : [];
@@ -144,7 +144,7 @@ Deno.serve(async (req: Request) => {
 
         if (gamesSaved > 1) await wait(350);
         const summaryResponse = await fetch(`${BASE}/summary?event=${encodeURIComponent(String(event.id))}`, {
-          headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000)
+          headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 boxscore-ingestion" }, signal: AbortSignal.timeout(20000)
         });
         if (!summaryResponse.ok) { issues.push(`${event.id}: summary HTTP ${summaryResponse.status}`); continue; }
         const summary = await summaryResponse.json();
