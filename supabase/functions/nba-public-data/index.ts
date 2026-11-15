@@ -70,13 +70,15 @@ Deno.serve(async (req: Request) => {
           const opponent = opponentId ? teamById.get(opponentId) : null;
           return {
             game_id: row.game_id, game_date: game?.scheduled_start ?? row.captured_at,
-            season: game?.season ?? null, game_status: game?.status ?? null,
+            season: game?.season ?? null,
+            season_start_year: game ? (new Date(game.scheduled_start).getUTCMonth() >= 6 ? new Date(game.scheduled_start).getUTCFullYear() : new Date(game.scheduled_start).getUTCFullYear() - 1) : null,
+            game_status: game?.status ?? null,
             team_abbreviation: team?.abbreviation ?? "",
             opponent_abbreviation: opponent?.abbreviation ?? "—",
             stats: row.stats ?? {}
           };
         }).sort((a: any, b: any) => Date.parse(b.game_date) - Date.parse(a.game_date));
-        seasonsOut = [...new Set(playerGamesOut.map((g: any) => g.season).filter((v: any) => Number.isInteger(v)))].sort((a, b) => b - a);
+        seasonsOut = [...new Set(playerGamesOut.map((g: any) => g.season_start_year).filter((v: any) => Number.isInteger(v)))].sort((a, b) => b - a);
       }
       return json({
         ok: true, players: playersOut, selected_player_id: playerId,
