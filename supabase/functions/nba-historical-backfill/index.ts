@@ -18,7 +18,7 @@ function seasonYear(iso: string) {
   return d.getUTCFullYear() - (d.getUTCMonth() < 6 ? 1 : 0);
 }
 function playerRows(boxPlayers: any[]) {
-  const rows: any[] = [];
+  const byId = new Map<string, any>();
   for (const group of boxPlayers ?? []) {
     const team = group.team ?? {};
     for (const category of group.statistics ?? []) {
@@ -27,20 +27,23 @@ function playerRows(boxPlayers: any[]) {
         if (!athlete.id || item.didNotPlay === true || item.reason) continue;
         const names = Array.isArray(category.names) ? category.names : [];
         const values = Array.isArray(item.stats) ? item.stats : [];
+        if (!values.length) continue;
         const mapped: Record<string, unknown> = {};
         names.forEach((name: string, i: number) => { if (values[i] !== undefined) mapped[name] = values[i]; });
-        if (!values.length) continue;
-        rows.push({
-          espn_id: String(athlete.id),
+        const id = String(athlete.id);
+        const existing = byId.get(id) ?? {
+          espn_id: id,
           name: String(athlete.displayName ?? athlete.fullName ?? athlete.shortName ?? "Unknown"),
           position: athlete.position?.abbreviation ?? athlete.position?.name ?? null,
           team_espn_id: team.id ? String(team.id) : null,
-          stats: { ...mapped, category: category.name ?? null, labels: category.labels ?? [], raw_stats: values }
-        });
+          stats: { categories: [] as any[] }
+        };
+        existing.stats.categories.push({ category: category.name ?? null, labels: category.labels ?? [], values: mapped, raw_stats: values });
+        byId.set(id, existing);
       }
     }
   }
-  return rows;
+  return [...byId.values()];
 }
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
@@ -67,22 +70,25 @@ Deno.serve(async (req: Request) => {
     runId = run.id;
     await supabase.from("historical_backfill_jobs").update({ status: "running", updated_at: startedAt, last_error: null }).eq("id", job.id);
 
-    const teamsResponse = await fetch(`${BASE}/teams?limit=1000`, { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000) });
-    if (!teamsResponse.ok) throw new Error(`ESPN teams HTTP ${teamsResponse.status}`);
-    const teamsPayload = await teamsResponse.json();
-    const sourceTeams = teamsPayload.sports?.[0]?.leagues?.[0]?.teams ?? [];
-    let teamsSynced = 0;
-    for (const entry of sourceTeams) {
-      const team = entry.team;
-      if (!team?.id || !team?.abbreviation || team.isActive === false || team.isAllStar === true) continue;
-      const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
-      const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
-      if (error || !data) throw new Error("Team upsert failed: " + error?.message);
-      const { error: mapError } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: String(team.id), team_id: data.id }, { onConflict: "source_name,source_team_id" });
-      if (mapError) throw new Error("Team mapping failed: " + mapError.message);
-      teamsSynced++;
+    let teamsSynced = Number(job.metadata?.teams_synced ?? 0);
+    if (teamsSynced !== 30) {
+      const teamsResponse = await fetch(`${BASE}/teams?limit=1000`, { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000) });
+      if (!teamsResponse.ok) throw new Error(`ESPN teams HTTP ${teamsResponse.status}`);
+      const teamsPayload = await teamsResponse.json();
+      const sourceTeams = teamsPayload.sports?.[0]?.leagues?.[0]?.teams ?? [];
+      teamsSynced = 0;
+      for (const entry of sourceTeams) {
+        const team = entry.team;
+        if (!team?.id || !team?.abbreviation || team.isActive === false || team.isAllStar === true) continue;
+        const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
+        const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
+        if (error || !data) throw new Error("Team upsert failed: " + error?.message);
+        const { error: mapError } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: String(team.id), team_id: data.id }, { onConflict: "source_name,source_team_id" });
+        if (mapError) throw new Error("Team mapping failed: " + mapError.message);
+        teamsSynced++;
+      }
+      if (teamsSynced !== 30) throw new Error(`Expected 30 active NBA teams, ESPN returned ${teamsSynced}`);
     }
-    if (teamsSynced !== 30) throw new Error(`Expected 30 active NBA teams, ESPN returned ${teamsSynced}`);
 
     let cursor = new Date(job.next_date + "T00:00:00.000Z");
     const end = new Date(job.end_date + "T00:00:00.000Z");
@@ -152,7 +158,7 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: "source_name,entity_type,source_entity_id,payload_sha256", ignoreDuplicates: true });
         if (eventSnapError) throw new Error("Event snapshot failed: " + eventSnapError.message);
 
-        if (boxscoresSaved > 0) await wait(350);
+        if (gamesSaved > 1) await wait(350);
         const summaryResponse = await fetch(`${BASE}/summary?event=${encodeURIComponent(String(event.id))}`, {
           headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000)
         });
