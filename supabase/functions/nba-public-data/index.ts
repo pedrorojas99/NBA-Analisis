@@ -53,14 +53,12 @@ Deno.serve(async (req: Request) => {
         captured_at: snap.captured_at
       });
     }
-    const [{ data: statRows, error: statRowsError }, { data: playerRows, error: playerRowsError }] = await Promise.all([
-      gameIds.length ? supabase.from("player_game_stats")
+    const { data: statRows, error: statRowsError } = gameIds.length
+      ? await supabase.from("player_game_stats")
         .select("game_id,player_id,team_id,stats,captured_at")
         .in("game_id", gameIds).neq("validation_status", "rejected")
         .order("captured_at", { ascending: false }).limit(500)
-        : Promise.resolve({ data: [], error: null }),
-      Promise.resolve({ data: [], error: null })
-    ]);
+      : { data: [], error: null };
     if (statRowsError) throw new Error("Player stats query failed: " + statRowsError.message);
     const playerIds = [...new Set((statRows ?? []).map((s: any) => s.player_id))];
     const { data: playerNames, error: playerNamesError } = playerIds.length
