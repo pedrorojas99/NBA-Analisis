@@ -89,14 +89,19 @@ class NbaData {
   final DateTime updatedAt;
   final List<NbaGame> games;
   final Map<String, dynamic> meta;
+  final List<NbaPlayerGameStat> playerStats;
 
-  const NbaData({required this.updatedAt, required this.games, required this.meta});
+  const NbaData({required this.updatedAt, required this.games, required this.meta, required this.playerStats});
 
   factory NbaData.fromJson(Map<String, dynamic> json) => NbaData(
     updatedAt: DateTime.parse(json['updated_at'] as String),
     games: (json['games'] as List? ?? [])
         .map((e) => NbaGame.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
     meta: Map<String, dynamic>.from(json['meta'] as Map? ?? {}),
+    playerStats: (json['player_stats'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => NbaPlayerGameStat.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
   );
 }
 
