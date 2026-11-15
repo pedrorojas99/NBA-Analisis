@@ -17,6 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool nbaLoading = true;
   String? nbaError;
   DateTime? nbaUpdatedAt;
+  Map<String, dynamic> nbaMeta = {};
   List<Prediction> predictions = [];
   bool loading = true;
 
@@ -37,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         nbaGames = data.games;
         nbaUpdatedAt = data.updatedAt;
+        nbaMeta = data.meta;
         nbaLoading = false;
       });
     } catch (e) {
@@ -111,6 +113,20 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(fontSize: 12)),
         ]),
       )),
+      if (nbaMeta.isNotEmpty) Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Cobertura de datos · ventana mostrada', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('Partidos: ${nbaMeta['games'] ?? 0} · Equipos: ${nbaMeta['teams'] ?? 0}'),
+            Text('Registros individuales: ${nbaMeta['player_stat_rows'] ?? 0}'),
+            Text('Registros por equipo: ${nbaMeta['team_stat_rows'] ?? 0}'),
+            const SizedBox(height: 4),
+            const Text('Estos recuentos corresponden a los partidos de esta ventana; no representan el total histórico.', style: TextStyle(fontSize: 11)),
+          ]),
+        ),
+      ),
       if (nbaLoading) const Padding(
         padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()),
       ),
