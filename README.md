@@ -1,34 +1,48 @@
-# NBA Analytics — versión inicial actualizada
+# NBA Analytics
 
-Proyecto Flutter para Android. Esta versión incorpora una primera base funcional para registrar pronósticos, guardar resultados reales y evaluar métricas sin modificar retroactivamente el pronóstico original.
+Aplicación Flutter para Android que combina datos NBA recopilados desde ESPN, consulta de estadísticas individuales y un registro verificable de pronósticos.
 
-## Incluido en esta versión
-- Registro manual de pronósticos de partidos: equipos, fecha, marcador estimado, ganador, probabilidad y versión del modelo.
-- Historial local persistente en el teléfono.
-- Registro posterior del marcador real, separado de los datos originales del pronóstico.
-- Bloqueo lógico de un segundo registro de resultado para el mismo pronóstico.
-- Métricas: acierto del ganador y error medio de puntos por equipo.
-- Comparación básica por versión del modelo.
-- Flujo de GitHub Actions para analizar y compilar un APK de lanzamiento.
+## Funciones disponibles
 
-## Límites importantes
-- Aún NO conecta con una API NBA, no descarga calendario/estadísticas y no genera predicciones automáticamente.
-- Los datos se guardan localmente en el dispositivo mediante SharedPreferences; todavía no hay sincronización en la nube ni respaldo multi-dispositivo.
-- El campo de versión identifica qué versión produjo el pronóstico; aún no existe entrenamiento automático. El aprendizaje real requiere datos históricos, validación temporal y comparación fuera de muestra.
-- La inmutabilidad está protegida por la lógica de la aplicación, no por una base de datos transaccional/auditable. Antes de producción conviene migrar a backend con registros append-only y controles de integridad.
+- Sincronización en la nube de calendario, marcadores y resultados mediante Supabase Edge Functions.
+- Recopilación periódica de boxscores y estadísticas de jugadores/equipos.
+- Pantalla de jugadores con búsqueda, temporadas disponibles, promedios calculados sobre los partidos recopilados y detalle de partidos recientes.
+- Pantalla NBA con calendario, marcadores recientes y estadísticas individuales disponibles.
+- Registro local de pronósticos manuales, conservando el pronóstico original al añadir el resultado real.
+- Métricas descriptivas de acierto del ganador y error medio de puntos, separadas por versión registrada.
 
-## Subir desde Android
-1. Descarga y extrae el ZIP con la aplicación Archivos.
-2. En GitHub crea un repositorio llamado `NBA-Analytics`.
-3. Sube el CONTENIDO de la carpeta extraída, manteniendo las carpetas `lib` y `.github`. No subas el ZIP como único archivo.
-4. Asegúrate de que la rama principal se llame `main`.
-5. Abre la pestaña Actions del repositorio y habilita los workflows si GitHub lo solicita.
-6. Espera a que termine `Build Android APK`. Si finaliza correctamente, abre la ejecución y descarga el artefacto `nba-analytics-apk`.
+## Estado y límites actuales
 
-## Desarrollo local
-Requiere Flutter estable y Android SDK:
+- La fuente de datos integrada es ESPN. La cobertura depende de la disponibilidad y calidad de los datos que entrega la fuente.
+- Los promedios de jugadores representan únicamente los partidos que ya están guardados; no deben interpretarse como promedios completos de temporada.
+- La sincronización histórica se ejecuta por lotes diarios. La cobertura histórica todavía está en proceso de ampliación.
+- Los pronósticos siguen siendo manuales y se guardan localmente en el teléfono. La aplicación todavía no genera pronósticos automáticos.
+- La sección de aprendizaje calcula métricas de evaluación, pero todavía no entrena ni modifica automáticamente un modelo.
+- El registro local del teléfono no equivale todavía a un historial de pronósticos sincronizado y auditable en la nube.
+
+## Arquitectura
+
+- **Android / Flutter:** interfaz y registro local de pronósticos.
+- **Supabase:** base de datos central para partidos, equipos, jugadores, resultados y estadísticas.
+- **Edge Functions:** sincronización de datos ESPN y API pública de solo lectura para la aplicación.
+- **GitHub Actions:** análisis estático y compilación del APK cuando el workflow correspondiente se ejecuta correctamente.
+
+La clave publishable incluida en la aplicación está diseñada para uso en clientes públicos. Nunca debe incluirse una clave secreta, una clave service_role ni credenciales de base de datos en el código Android.
+
+## Compilar
+
+Con Flutter estable y Android SDK instalados:
+
 ```bash
 flutter pub get
 flutter analyze
-flutter run
+flutter build apk --release
 ```
+
+El APK generado localmente se encuentra en:
+
+```text
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+Para descargar una compilación de GitHub Actions, abre Actions, selecciona una ejecución que haya terminado correctamente y descarga el artefacto APK de esa ejecución. Comprueba la fecha y el commit de la ejecución para asegurarte de que contiene los cambios más recientes.
