@@ -25,11 +25,16 @@ Deno.serve(async (req: Request) => {
         gameSets.get(row.player_id)!.add(row.game_id);
       }
       const playerIds = [...gameSets.keys()];
-      const { data: playerRows, error: playersError } = playerIds.length
-        ? await supabase.from("players").select("id,display_name,position,active")
-            .in("id", playerIds).order("display_name", { ascending: true })
-        : { data: [], error: null };
-      if (playersError) throw new Error("Players query failed: " + playersError.message);
+      // Keep URL/query sizes bounded: a large .in() list can fail before PostgREST responds.
+      const playerRows: any[] = [];
+      for (let offset = 0; offset < playerIds.length; offset += 100) {
+        const batch = playerIds.slice(offset, offset + 100);
+        const { data, error: playersError } = await supabase.from("players")
+          .select("id,display_name,position,active")
+          .in("id", batch).order("display_name", { ascending: true });
+        if (playersError) throw new Error("Players query failed: " + playersError.message);
+        playerRows.push(...(data ?? []));
+      }
       const playersOut = (playerRows ?? []).map((p: any) => ({
         id: p.id, name: p.display_name, position: p.position,
         active: p.active, games_count: gameSets.get(p.id)?.size ?? 0
