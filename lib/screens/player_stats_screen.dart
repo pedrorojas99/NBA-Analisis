@@ -114,7 +114,9 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
   Widget build(BuildContext context) {
     final filteredPlayers = players.where((p) =>
       (p['name'] ?? '').toString().toLowerCase().contains(search.toLowerCase())).toList();
-    final selected = players.where((p) => p['id'] == selectedPlayerId).firstOrNull;
+    final selectedMatches = players.where((p) => p['id'] == selectedPlayerId).toList();
+    final selected = selectedMatches.isEmpty ? null : selectedMatches.first;
+    final dropdownPlayerId = filteredPlayers.any((p) => p['id'] == selectedPlayerId) ? selectedPlayerId : null;
     final seasonGames = selectedSeason == null
         ? games
         : games.where((g) => g['season'] == selectedSeason).toList();
@@ -137,7 +139,7 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            value: selectedPlayerId,
+            value: dropdownPlayerId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Jugador', border: OutlineInputBorder()),
             items: filteredPlayers.map((p) => DropdownMenuItem<String>(
