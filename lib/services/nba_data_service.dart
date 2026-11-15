@@ -59,6 +59,32 @@ class NbaGame {
       ? _number(result!['away_score']) : _number(liveScore?['away']);
 }
 
+class NbaPlayerGameStat {
+  final String playerName;
+  final String teamAbbreviation;
+  final DateTime gameDate;
+  final Map<String, dynamic> stats;
+
+  const NbaPlayerGameStat({
+    required this.playerName,
+    required this.teamAbbreviation,
+    required this.gameDate,
+    required this.stats,
+  });
+
+  factory NbaPlayerGameStat.fromJson(Map<String, dynamic> json) =>
+      NbaPlayerGameStat(
+        playerName: (json['player_name'] ?? 'Jugador').toString(),
+        teamAbbreviation: (json['team_abbreviation'] ?? '').toString(),
+        gameDate: DateTime.parse(json['game_date'] as String),
+        stats: json['stats'] is Map
+            ? Map<String, dynamic>.from(json['stats'] as Map)
+            : <String, dynamic>{},
+      );
+
+  String value(String key) => (stats[key] ?? '—').toString();
+}
+
 class NbaData {
   final DateTime updatedAt;
   final List<NbaGame> games;
