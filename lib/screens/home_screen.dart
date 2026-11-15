@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/nba_data_service.dart';
 import '../models/prediction.dart';
 import '../services/prediction_store.dart';
+import 'player_stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -74,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _liveNbaPage(), _gamesPage(), _historyPage(), _learningPage(),
+      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(), _historyPage(), _learningPage(),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -82,7 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); }, icon: const Icon(Icons.refresh))],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
-      floatingActionButton: tab == 1 ? FloatingActionButton.extended(
+      floatingActionButton: tab == 2 ? FloatingActionButton.extended(
         onPressed: addPrediction, icon: const Icon(Icons.add), label: const Text('Registrar pronóstico'),
       ) : null,
       bottomNavigationBar: NavigationBar(
@@ -90,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected: (v) => setState(() => tab = v),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
+          NavigationDestination(icon: Icon(Icons.person_search), label: 'Jugadores'),
           NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
