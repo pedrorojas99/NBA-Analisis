@@ -8,6 +8,18 @@ const BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
 function normalizeTeamAbbr(value: unknown) { const abbr = String(value ?? "").toUpperCase(); return abbr === "GS" ? "GSW" : abbr; }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+async function fetchEspn(url: string, userAgent: string, attempts = 4): Promise<Response> {
+  let last: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    last = await fetch(url, {
+      headers: { "accept": "application/json", "user-agent": userAgent },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (last.ok || ![403, 408, 429, 500, 502, 503, 504].includes(last.status)) return last;
+    if (attempt + 1 < attempts) await wait(1200 * (attempt + 1));
+  }
+  return last!;
+}
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -72,7 +84,7 @@ Deno.serve(async (req: Request) => {
     await supabase.from("historical_backfill_jobs").update({ status: "running", updated_at: startedAt, last_error: null }).eq("id", job.id);
 
     const { count: teamsSynced, error: teamsCountError } = await supabase.from("teams").select("id", { count: "exact", head: true });
-    if (teamsCountError || teamsSynced !== 30) throw new Error(`Expected 30 registered NBA teams, found ${teamsSynced ?? 0}`);
+    if (teamsCountError || (teamsSynced ?? 0) < 30) throw new Error(`Expected at least 30 registered NBA teams, found ${teamsSynced ?? 0}`);
 
     let cursor = new Date(job.next_date + "T00:00:00.000Z");
     const end = new Date(job.end_date + "T00:00:00.000Z");
@@ -81,7 +93,7 @@ Deno.serve(async (req: Request) => {
     const issues: string[] = [];
     while (cursor <= end && datesChecked < maxDays) {
       const key = dateKey(cursor);
-      const response = await fetch(`${BASE}/scoreboard?dates=${key}&limit=1000`, { headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 data-ingestion" }, signal: AbortSignal.timeout(20000) });
+      const response = await fetchEspn(`${BASE}/scoreboard?dates=${key}&limit=1000`, "NBA-Analytics/1.0 data-ingestion");
       if (!response.ok) throw new Error(`ESPN scoreboard ${key} HTTP ${response.status}`);
       const payload = await response.json();
       const events = Array.isArray(payload.events) ? payload.events : [];
@@ -143,9 +155,7 @@ Deno.serve(async (req: Request) => {
         if (eventSnapError) throw new Error("Event snapshot failed: " + eventSnapError.message);
 
         if (gamesSaved > 1) await wait(350);
-        const summaryResponse = await fetch(`${BASE}/summary?event=${encodeURIComponent(String(event.id))}`, {
-          headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 boxscore-ingestion" }, signal: AbortSignal.timeout(20000)
-        });
+        const summaryResponse = await fetchEspn(`${BASE}/summary?event=${encodeURIComponent(String(event.id))}`, "NBA-Analytics/1.0 boxscore-ingestion");
         if (!summaryResponse.ok) { issues.push(`${event.id}: summary HTTP ${summaryResponse.status}`); continue; }
         const summary = await summaryResponse.json();
         const box = summary.boxscore;
