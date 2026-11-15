@@ -17,7 +17,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool nbaLoading = true;
   String? nbaError;
   DateTime? nbaUpdatedAt;
-  Map<String, dynamic> nbaMeta = {};\n  List<NbaPlayerGameStat> nbaPlayerStats = [];
+  Map<String, dynamic> nbaMeta = {};
+  List<NbaPlayerGameStat> nbaPlayerStats = [];
   List<Prediction> predictions = [];
   bool loading = true;
 
