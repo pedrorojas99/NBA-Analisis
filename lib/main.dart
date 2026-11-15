@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 
-void main() {
+const supabaseUrl = 'https://sjzfrrwbirnaoqqgxblv.supabase.co';
+const supabasePublishableKey = 'sb_publishable_6GMybhvJBAFCf7gMR2-hPw_EMxBPQV7';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
   runApp(const NbaAnalyticsApp());
 }
 
