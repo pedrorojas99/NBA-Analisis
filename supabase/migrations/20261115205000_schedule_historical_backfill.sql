@@ -16,6 +16,18 @@ begin
         UPDATE public.historical_backfill_jobs
            SET status = 'queued', updated_at = now(), last_error = 'Recovered stale running job for retry'
          WHERE status = 'running' AND updated_at < now() - interval '20 minutes';
+        UPDATE public.historical_backfill_jobs main_job
+           SET status = 'queued', updated_at = now()
+         WHERE main_job.status = 'paused'
+           AND coalesce(main_job.metadata->>'repair','false') <> 'true'
+           AND EXISTS (
+             SELECT 1 FROM public.historical_backfill_jobs repair
+             WHERE repair.metadata->>'repair' = 'true' AND repair.status = 'completed'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM public.historical_backfill_jobs repair
+             WHERE repair.metadata->>'repair' = 'true' AND repair.status IN ('queued','running','failed')
+           );
         SELECT id INTO v_job_id
           FROM public.historical_backfill_jobs
          WHERE status = 'queued'
