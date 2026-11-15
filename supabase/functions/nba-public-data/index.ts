@@ -53,6 +53,41 @@ Deno.serve(async (req: Request) => {
         captured_at: snap.captured_at
       });
     }
+    const [{ data: statRows, error: statRowsError }, { data: playerRows, error: playerRowsError }] = await Promise.all([
+      gameIds.length ? supabase.from("player_game_stats")
+        .select("game_id,player_id,team_id,stats,captured_at")
+        .in("game_id", gameIds).neq("validation_status", "rejected")
+        .order("captured_at", { ascending: false }).limit(500)
+        : Promise.resolve({ data: [], error: null }),
+      Promise.resolve({ data: [], error: null })
+    ]);
+    if (statRowsError) throw new Error("Player stats query failed: " + statRowsError.message);
+    const playerIds = [...new Set((statRows ?? []).map((s: any) => s.player_id))];
+    const { data: playerNames, error: playerNamesError } = playerIds.length
+      ? await supabase.from("players").select("id,display_name,position").in("id", playerIds)
+      : { data: [], error: null };
+    if (playerNamesError) throw new Error("Player names query failed: " + playerNamesError.message);
+    const playerById = new Map((playerNames ?? []).map((p: any) => [p.id, p]));
+    const gameById = new Map((games ?? []).map((g: any) => [g.id, g]));
+    const latestStats = new Map<string, any>();
+    for (const row of statRows ?? []) {
+      const key = row.game_id + ":" + row.player_id;
+      if (!latestStats.has(key)) latestStats.set(key, row);
+    }
+    const playerStatsOut = [...latestStats.values()].map((row: any) => {
+      const player = playerById.get(row.player_id);
+      const team = teamById.get(row.team_id);
+      const game = gameById.get(row.game_id);
+      return {
+        game_id: row.game_id,
+        player_id: row.player_id,
+        player_name: player?.display_name ?? "Jugador",
+        position: player?.position ?? null,
+        team_abbreviation: team?.abbreviation ?? "",
+        game_date: game?.scheduled_start ?? row.captured_at,
+        stats: row.stats ?? {}
+      };
+    }).filter((row: any) => row.stats && Object.keys(row.stats).length > 0);
     const gamesOut = (games ?? []).map((g: any) => ({
       id: g.id, season: g.season, scheduled_start: g.scheduled_start, status: g.status,
       status_detail: g.status_detail, is_neutral_site: g.is_neutral_site,
@@ -69,7 +104,7 @@ Deno.serve(async (req: Request) => {
     if (teamStatError) throw new Error("Team stats count failed: " + teamStatError.message);
     return json({
       ok: true, updated_at: now.toISOString(), window: { from, to },
-      games: gamesOut, meta: {
+      games: gamesOut, player_stats: playerStatsOut, meta: {
         games: gamesOut.length, teams: teams?.length ?? 0,
         player_stat_rows: playerStatCount ?? 0, team_stat_rows: teamStatCount ?? 0
       }
