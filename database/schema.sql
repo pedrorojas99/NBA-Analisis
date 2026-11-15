@@ -86,8 +86,7 @@ create table if not exists predictions (
  model_version_id uuid not null references model_versions(id),
  created_at timestamptz not null default now(), feature_cutoff_at timestamptz not null,
  prediction_type text not null, target_key text not null, forecast jsonb not null,
- input_snapshot_sha256 text not null,
- unique(game_id,model_version_id,prediction_type,target_key)
+ input_snapshot_sha256 text not null
 );
 create index if not exists idx_predictions_game on predictions(game_id,created_at);
 create index if not exists idx_predictions_model on predictions(model_version_id,created_at);
