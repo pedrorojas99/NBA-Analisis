@@ -43,8 +43,8 @@ Manual invocation through `pg_net` succeeded on 2026-11-15:
 - 30 canonical NBA teams (duplicate ESPN alias `GS` normalized to canonical `GSW`)
 - 61 games currently stored
 - 53 final game results currently stored
-- 221 player records
-- 277 player-game stat rows currently stored (repair pass is still running)
+- 368 player records
+- 447 player-game stat rows currently stored (repair pass is still running)
 - 110 team-game stat rows
 - 3 active cron jobs: live scoreboard, live boxscores, and historical backfill
 
@@ -55,8 +55,8 @@ Counts may increase as the historical job advances. Current live data and histor
 - Target window: 2024-10-22 through 2026-06-30 (2024-25 and 2025-26 seasons).
 - The first 7-day batch successfully processed 52 completed games: 52 final results, 52 boxscore snapshots, and 104 team-stat rows; no ESPN summary issues were reported.
 - The first pass exposed a player filter bug: ESPN's `reason` field can be populated even when the player participated. The filter was corrected in backfill function version 6.
-- A repair pass is reprocessing the first 7 dates to fill missing player-game stats. It has already raised the table count from 70 to 277; completion is still being verified.
-- The main historical job is paused at 2024-10-29 until the repair pass finishes, then it will resume.
+- A repair pass is reprocessing the first 7 dates to fill missing player-game stats. It has already raised the table count from 70 to 447 across 368 player records; completion is still being verified.
+- The main historical job is paused at 2024-10-29 until the repair pass finishes, then the 2024-25 / 2025-26 main backfill will resume automatically.
 - Each boxscore snapshot stores the compact game header and boxscore rather than full play-by-play, limiting storage growth on the Supabase Free tier.
 
 ## Current limitations and next work
