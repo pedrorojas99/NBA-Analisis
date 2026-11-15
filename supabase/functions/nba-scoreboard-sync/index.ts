@@ -6,6 +6,7 @@ const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_K
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
 const ESPN_TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams?limit=1000";
+function normalizeTeamAbbr(value: unknown) { const abbr = String(value ?? "").toUpperCase(); return abbr === "GS" ? "GSW" : abbr; }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -30,7 +31,7 @@ Deno.serve(async (req: Request) => {
     for (const entry of sourceTeams) {
       const team = entry.team;
       if (!team?.id || !team?.abbreviation || team.isActive === false || team.isAllStar === true) continue;
-      const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
+      const row = { abbreviation: normalizeTeamAbbr(team.abbreviation), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
       const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
       if (error || !data) throw new Error(`League team upsert failed: ${error?.message}`);
       const { error: sourceError } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: String(team.id), team_id: data.id }, { onConflict: "source_name,source_team_id" });
@@ -51,13 +52,13 @@ Deno.serve(async (req: Request) => {
       const teamRows = [];
       for (const item of [home, away]) {
         const team = item.team;
-        const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
+        const row = { abbreviation: normalizeTeamAbbr(team.abbreviation), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
         const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
         if (error || !data) throw new Error(`Team upsert failed: ${error?.message}`);
         teamRows.push({ ...data, source_id: String(team.id ?? team.abbreviation) });
       }
-      const homeTeam = teamRows.find((t) => t.abbreviation === String(home.team.abbreviation).toUpperCase());
-      const awayTeam = teamRows.find((t) => t.abbreviation === String(away.team.abbreviation).toUpperCase());
+      const homeTeam = teamRows.find((t) => t.abbreviation === normalizeTeamAbbr(home.team.abbreviation));
+      const awayTeam = teamRows.find((t) => t.abbreviation === normalizeTeamAbbr(away.team.abbreviation));
       if (!homeTeam || !awayTeam) continue;
       for (const t of teamRows) {
         const { error } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: t.source_id, team_id: t.id }, { onConflict: "source_name,source_team_id" });
