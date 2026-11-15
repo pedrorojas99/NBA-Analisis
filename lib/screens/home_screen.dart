@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/nba_data_service.dart';
 import '../models/prediction.dart';
 import '../services/prediction_store.dart';
 
@@ -10,17 +11,38 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final store = PredictionStore();
+  final nbaService = NbaDataService();
   int tab = 0;
+  List<NbaGame> nbaGames = [];
+  bool nbaLoading = true;
+  String? nbaError;
+  DateTime? nbaUpdatedAt;
   List<Prediction> predictions = [];
   bool loading = true;
 
   @override
-  void initState() { super.initState(); refresh(); }
+  void initState() { super.initState(); refresh(); refreshNbaData(); }
 
   Future<void> refresh() async {
     final data = await store.load();
     if (!mounted) return;
     setState(() { predictions = data; loading = false; });
+  }
+
+  Future<void> refreshNbaData() async {
+    if (mounted) setState(() { nbaLoading = true; nbaError = null; });
+    try {
+      final data = await nbaService.load();
+      if (!mounted) return;
+      setState(() {
+        nbaGames = data.games;
+        nbaUpdatedAt = data.updatedAt;
+        nbaLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { nbaError = e.toString(); nbaLoading = false; });
+    }
   }
 
   Future<void> addPrediction() async {
@@ -48,28 +70,99 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _gamesPage(), _historyPage(), _learningPage(),
+      _liveNbaPage(), _gamesPage(), _historyPage(), _learningPage(),
     ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-        actions: [IconButton(onPressed: refresh, icon: const Icon(Icons.refresh))],
+        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); }, icon: const Icon(Icons.refresh))],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
-      floatingActionButton: tab == 0 ? FloatingActionButton.extended(
+      floatingActionButton: tab == 1 ? FloatingActionButton.extended(
         onPressed: addPrediction, icon: const Icon(Icons.add), label: const Text('Registrar pronóstico'),
       ) : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (v) => setState(() => tab = v),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'Partidos'),
+          NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
+          NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
         ],
       ),
     );
   }
+
+  Widget _liveNbaPage() => RefreshIndicator(
+    onRefresh: refreshNbaData,
+    child: ListView(padding: const EdgeInsets.all(16), children: [
+      _section('NBA · Partidos y marcadores'),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Fuente de datos: ESPN', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 5),
+          Text(nbaUpdatedAt == null
+              ? 'Conectando con NBA Analytics…'
+              : 'Actualizado: ' + nbaUpdatedAt!.toLocal().toString().substring(0, 16)),
+          const SizedBox(height: 4),
+          const Text('El calendario se sincroniza en la nube cada 15 minutos. Desliza hacia abajo para actualizar ahora.',
+              style: TextStyle(fontSize: 12)),
+        ]),
+      )),
+      if (nbaLoading) const Padding(
+        padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()),
+      ),
+      if (nbaError != null) Card(child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Text('No se pudo conectar: ' + nbaError!, style: const TextStyle(color: Colors.orangeAccent)),
+      )),
+      if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
+        _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
+      ...nbaGames.map(_nbaGameCard),
+    ]),
+  );
+
+  Widget _nbaGameCard(NbaGame game) {
+    final away = game.awayTeam;
+    final home = game.homeTeam;
+    final isFinal = game.status == 'final';
+    final isLive = game.status == 'in_progress';
+    final statusLabel = isFinal ? 'FINAL' : (isLive ? 'EN JUEGO' : 'PROGRAMADO');
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(padding: const EdgeInsets.all(14), child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text(game.scheduledStart.toLocal().toString().substring(0, 16),
+                style: Theme.of(context).textTheme.bodySmall),
+            Text(statusLabel, style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isLive ? Colors.greenAccent : (isFinal ? Colors.blueAccent : Colors.orangeAccent),
+            )),
+          ]),
+          const SizedBox(height: 12),
+          _teamScoreRow(away?.abbreviation ?? 'VIS', away?.name ?? 'Visitante', game.awayScore),
+          const SizedBox(height: 8),
+          _teamScoreRow(home?.abbreviation ?? 'LOC', home?.name ?? 'Local', game.homeScore),
+          if (game.statusDetail != null && game.statusDetail!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(game.statusDetail!, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ],
+      )),
+    );
+  }
+
+  Widget _teamScoreRow(String abbreviation, String name, int? score) => Row(
+    children: [
+      SizedBox(width: 48, child: Text(abbreviation, style: const TextStyle(fontWeight: FontWeight.w900))),
+      Expanded(child: Text(name)),
+      Text(score?.toString() ?? '—', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+    ],
+  );
 
   Widget _gamesPage() => RefreshIndicator(
     onRefresh: refresh,
