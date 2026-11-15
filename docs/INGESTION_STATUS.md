@@ -5,6 +5,7 @@
 - Provider: ESPN public NBA Site API.
 - Scoreboard function: `nba-scoreboard-sync` (schedule, game status, final scores).
 - Boxscore function: `nba-boxscore-sync` (team and player boxscores).
+- Mobile read API: `nba-public-data` (allowlisted read-only response for games, teams, live scores, and final results).
 - Supabase project: `sjzfrrwbirnaoqqgxblv`.
 - Both functions are scheduled every 15 minutes with Supabase Cron (`pg_cron`) and `pg_net`.
 - Boxscore collection checks in-progress and recently finished games (last 36 hours), limits a run to 30 games, and waits at least one second between ESPN summary requests.
@@ -53,8 +54,10 @@ Counts may increase as live games progress. The player/team stat JSON preserves 
 - Player season averages, standings, injuries, lineups, and availability are not yet ingested.
 - ESPN is the operational source. NBA.com previously returned HTTP 403 from GitHub Actions, so it is not currently a reliable second source.
 - Supabase Free projects may pause after inactivity; scheduled jobs cannot run while the project is paused. No 24/7 guarantee is made.
-- Public app read access is not enabled yet. RLS remains enabled with no public policies until we define a narrow read-only interface. No anonymous writes are allowed.
+- Public app read access is limited to SELECT policies on teams, games, game_results, players, player_game_stats, and team_game_stats. No anonymous writes are allowed. Raw snapshots, ingestion logs, source mappings, predictions, and model evaluation tables remain private.
+- The Android app calls the `nba-public-data` Edge Function using only the publishable key. The function uses the server-side secret internally and returns only an allowlisted set of fields.
 - Predictions, evaluation metrics, and model learning are not yet connected to this live-data pipeline.
+- The Android app now has a cloud scoreboard screen wired to `nba-public-data`; the APK build is being validated by GitHub Actions.
 
 ## Security
 
