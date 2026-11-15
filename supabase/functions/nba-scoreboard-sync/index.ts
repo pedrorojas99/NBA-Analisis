@@ -5,6 +5,7 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const ESPN_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+const ESPN_TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams?limit=1000";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -21,6 +22,22 @@ Deno.serve(async (req: Request) => {
     .insert({ source_name: "espn_scoreboard", started_at: startedAt, ok: false }).select("id").single();
   if (runError || !run) return json({ error: "Could not start ingestion log", detail: runError?.message }, 500);
   try {
+    const teamsResponse = await fetch(ESPN_TEAMS_URL, { headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 data-ingestion" }, signal: AbortSignal.timeout(20000) });
+    if (!teamsResponse.ok) throw new Error(`ESPN teams HTTP ${teamsResponse.status}`);
+    const teamsPayload = await teamsResponse.json();
+    const sourceTeams = teamsPayload.sports?.[0]?.leagues?.[0]?.teams ?? [];
+    let leagueTeamsSaved = 0;
+    for (const entry of sourceTeams) {
+      const team = entry.team;
+      if (!team?.id || !team?.abbreviation || team.isActive === false || team.isAllStar === true) continue;
+      const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
+      const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
+      if (error || !data) throw new Error(`League team upsert failed: ${error?.message}`);
+      const { error: sourceError } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: String(team.id), team_id: data.id }, { onConflict: "source_name,source_team_id" });
+      if (sourceError) throw new Error(`League team mapping failed: ${sourceError.message}`);
+      leagueTeamsSaved++;
+    }
+    if (leagueTeamsSaved !== 30) throw new Error(`Expected 30 active NBA teams from ESPN, received ${leagueTeamsSaved}`);
     const response = await fetch(ESPN_URL, { headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 data-ingestion" }, signal: AbortSignal.timeout(20000) });
     if (!response.ok) throw new Error(`ESPN HTTP ${response.status}`);
     const payload = await response.json();
@@ -75,7 +92,7 @@ Deno.serve(async (req: Request) => {
       }
     }
     await supabase.from("source_ingestion_runs").update({ finished_at: new Date().toISOString(), ok: true, http_status: 200, records_seen: events.length, metadata: { games_saved: gamesSaved, final_results_saved: resultsSaved, snapshots_saved: snapshotsSaved } }).eq("id", run.id);
-    return json({ ok: true, source: "ESPN", events_seen: events.length, games_saved: gamesSaved, final_results_saved: resultsSaved, snapshots_saved: snapshotsSaved, note: "Scoreboard and final scores only; player/team boxscore statistics are a separate ingestion stage." });
+    return json({ ok: true, source: "ESPN", league_teams_saved: leagueTeamsSaved, events_seen: events.length, games_saved: gamesSaved, final_results_saved: resultsSaved, snapshots_saved: snapshotsSaved, note: "Scoreboard and final scores only; player/team boxscore statistics are a separate ingestion stage." });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabase.from("source_ingestion_runs").update({ finished_at: new Date().toISOString(), ok: false, error_message: message }).eq("id", run.id);
