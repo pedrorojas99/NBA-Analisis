@@ -70,25 +70,8 @@ Deno.serve(async (req: Request) => {
     runId = run.id;
     await supabase.from("historical_backfill_jobs").update({ status: "running", updated_at: startedAt, last_error: null }).eq("id", job.id);
 
-    let teamsSynced = Number(job.metadata?.teams_synced ?? 0);
-    if (teamsSynced !== 30) {
-      const teamsResponse = await fetch(`${BASE}/teams?limit=1000`, { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(20000) });
-      if (!teamsResponse.ok) throw new Error(`ESPN teams HTTP ${teamsResponse.status}`);
-      const teamsPayload = await teamsResponse.json();
-      const sourceTeams = teamsPayload.sports?.[0]?.leagues?.[0]?.teams ?? [];
-      teamsSynced = 0;
-      for (const entry of sourceTeams) {
-        const team = entry.team;
-        if (!team?.id || !team?.abbreviation || team.isActive === false || team.isAllStar === true) continue;
-        const row = { abbreviation: String(team.abbreviation).toUpperCase(), display_name: String(team.displayName ?? team.name ?? team.abbreviation), city: team.location ?? null };
-        const { data, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id,abbreviation").single();
-        if (error || !data) throw new Error("Team upsert failed: " + error?.message);
-        const { error: mapError } = await supabase.from("team_source_ids").upsert({ source_name: "espn", source_team_id: String(team.id), team_id: data.id }, { onConflict: "source_name,source_team_id" });
-        if (mapError) throw new Error("Team mapping failed: " + mapError.message);
-        teamsSynced++;
-      }
-      if (teamsSynced !== 30) throw new Error(`Expected 30 active NBA teams, ESPN returned ${teamsSynced}`);
-    }
+    const { count: teamsSynced, error: teamsCountError } = await supabase.from("teams").select("id", { count: "exact", head: true });
+    if (teamsCountError || teamsSynced !== 30) throw new Error(`Expected 30 registered NBA teams, found ${teamsSynced ?? 0}`);
 
     let cursor = new Date(job.next_date + "T00:00:00.000Z");
     const end = new Date(job.end_date + "T00:00:00.000Z");
