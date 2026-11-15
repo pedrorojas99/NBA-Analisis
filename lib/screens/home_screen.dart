@@ -39,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
         nbaGames = data.games;
         nbaUpdatedAt = data.updatedAt;
         nbaMeta = data.meta;
+        nbaPlayerStats = data.playerStats;
         nbaLoading = false;
       });
     } catch (e) {
