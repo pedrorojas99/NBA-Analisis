@@ -138,8 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(),
-      _previousSlatePage(), _historyPage(), _learningPage(),
+      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(), _historyPage(), _learningPage(),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -157,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
           NavigationDestination(icon: Icon(Icons.person_search), label: 'Jugadores'),
           NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
-          NavigationDestination(icon: Icon(Icons.fact_check), label: 'Jornada anterior'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
         ],
@@ -372,11 +370,11 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
-  Widget _previousSlatePage() => RefreshIndicator(
-    onRefresh: refreshCloudHistory,
-    child: ListView(padding: const EdgeInsets.all(16), children: [
+  Widget _previousSlateSection() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
       _section('Jornada anterior'),
-      const Text('Aquí aparecen los partidos de la última jornada NBA completamente terminada para la que guardamos pronósticos. El marcador previsto se conserva tal como se calculó antes del inicio.'),
+      const Text('Comparación de los partidos de la última jornada NBA completamente terminada para la que guardamos pronósticos. El marcador previsto se conserva tal como se calculó antes del inicio.'),
       const SizedBox(height: 12),
       if (cloudHistoryLoading)
         const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
@@ -413,7 +411,8 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 8),
         ...cloudPreviousSlateGames.map(_previousSlateGameCard),
       ],
-    ]),
+      const SizedBox(height: 10),
+    ],
   );
 
   Widget _previousSlateGameCard(NbaStoredPrediction p) {
@@ -461,6 +460,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _historyPage() => RefreshIndicator(
     onRefresh: refreshCloudHistory,
     child: ListView(padding: const EdgeInsets.all(16), children: [
+      _previousSlateSection(),
+      const Divider(height: 28),
       _section('Historial automático en la nube'),
       const Text('Los pronósticos guardados por el motor se conservan con su versión y datos de entrada. Cuando llega el resultado final, se calcula su error sin modificar el pronóstico original.'),
       const SizedBox(height: 8),
