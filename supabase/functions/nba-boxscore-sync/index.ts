@@ -24,6 +24,9 @@ function playerRows(boxPlayers: any[]) {
         const values = Array.isArray(item.stats) ? item.stats : [];
         const mapped: Record<string, unknown> = {};
         names.forEach((name: string, i: number) => { if (values[i] !== undefined) mapped[name] = values[i]; });
+        // ESPN uses "-" or "--" for players who have not entered the game (DNP / not yet played).
+        // Keep their raw boxscore in the immutable snapshot, but do not create fake zero-minute stat rows.
+        if (["-", "--", "DNP"].includes(String(mapped.MIN ?? "").trim().toUpperCase())) continue;
         rows.push({
           espn_id: String(athlete.id),
           name: String(athlete.displayName ?? athlete.fullName ?? athlete.shortName ?? "Unknown"),
@@ -62,11 +65,13 @@ Deno.serve(async (req: Request) => {
       const eventId = mapping?.source_game_id;
       if (!eventId) continue;
       if (game.status === "final") {
-        const [{ count: playerCount }, { count: teamCount }] = await Promise.all([
-          supabase.from("player_game_stats").select("id", { count: "exact", head: true }).eq("game_id", game.id),
-          supabase.from("team_game_stats").select("id", { count: "exact", head: true }).eq("game_id", game.id)
-        ]);
-        if ((playerCount ?? 0) > 0 && (teamCount ?? 0) > 0) continue;
+        // An in-progress snapshot is not a final boxscore. Skip only after a final marker
+        // has been written following successful normalized-stat ingestion.
+        const { data: finalMarker, error: markerError } = await supabase.from("raw_source_snapshots")
+          .select("id").eq("source_name", "espn").eq("entity_type", "boxscore_final")
+          .eq("source_entity_id", String(eventId)).limit(1).maybeSingle();
+        if (markerError) throw new Error("Final boxscore marker lookup failed: " + markerError.message);
+        if (finalMarker) continue;
       }
       if (gamesChecked > 0) await wait(1000);
       gamesChecked++;
@@ -131,6 +136,15 @@ Deno.serve(async (req: Request) => {
         });
         if (statError && !statError.message.includes("duplicate key")) throw new Error("Player stats insert failed: " + statError.message);
         if (!statError) playersSaved++;
+      }
+      if (game.status === "final" && (localTeamCount > 0 || extractedPlayers.length > 0)) {
+        // This marker is deliberately written last: if any stat insert fails, the next
+        // scheduled run retries the final boxscore instead of treating a partial save as complete.
+        const { error: finalMarkerError } = await supabase.from("raw_source_snapshots").upsert({
+          run_id: run.id, source_name: "espn", entity_type: "boxscore_final",
+          source_entity_id: String(eventId), payload_sha256: digest, payload: summary
+        }, { onConflict: "source_name,entity_type,source_entity_id,payload_sha256", ignoreDuplicates: true });
+        if (finalMarkerError) throw new Error("Final boxscore marker save failed: " + finalMarkerError.message);
       }
       if (localTeamCount > 0 || extractedPlayers.length > 0) gamesWithBoxscore++;
     }
