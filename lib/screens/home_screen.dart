@@ -35,6 +35,12 @@ class _HomeScreenState extends State<HomeScreen> {
   int cloudEvaluatedCount = 0;
   int cloudPendingCount = 0;
   List<NbaTeamErrorSummary> cloudTeamAnalysis = [];
+  String? cloudPreviousSlateDate;
+  List<NbaStoredPrediction> cloudPreviousSlateGames = [];
+  int cloudPreviousSlateWinnerCorrect = 0;
+  double? cloudPreviousSlateWinnerAccuracyPct;
+  double? cloudPreviousSlateAverageScoreError;
+  double? cloudPreviousSlateAverageMarginError;
   List<Prediction> predictions = [];
   bool loading = true;
 
@@ -75,6 +81,12 @@ class _HomeScreenState extends State<HomeScreen> {
         cloudEvaluatedCount = data.evaluatedCount;
         cloudPendingCount = data.pendingCount;
         cloudTeamAnalysis = data.teamAnalysis;
+        cloudPreviousSlateDate = data.previousSlateDate;
+        cloudPreviousSlateGames = data.previousSlateGames;
+        cloudPreviousSlateWinnerCorrect = data.previousSlateWinnerCorrect;
+        cloudPreviousSlateWinnerAccuracyPct = data.previousSlateWinnerAccuracyPct;
+        cloudPreviousSlateAverageScoreError = data.previousSlateAverageScoreError;
+        cloudPreviousSlateAverageMarginError = data.previousSlateAverageMarginError;
         cloudHistoryLoading = false;
       });
     } catch (e) {
@@ -126,7 +138,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(), _historyPage(), _learningPage(),
+      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(),
+      _previousSlatePage(), _historyPage(), _learningPage(),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -144,6 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
           NavigationDestination(icon: Icon(Icons.person_search), label: 'Jugadores'),
           NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
+          NavigationDestination(icon: Icon(Icons.fact_check), label: 'Jornada anterior'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
         ],
@@ -357,6 +371,92 @@ class _HomeScreenState extends State<HomeScreen> {
       ...predictions.map((p) => _predictionCard(p, allowResult: !p.isSettled)),
     ]),
   );
+
+  Widget _previousSlatePage() => RefreshIndicator(
+    onRefresh: refreshCloudHistory,
+    child: ListView(padding: const EdgeInsets.all(16), children: [
+      _section('Jornada anterior'),
+      const Text('Aquí aparecen los partidos de la última jornada NBA completamente terminada para la que guardamos pronósticos. El marcador previsto se conserva tal como se calculó antes del inicio.'),
+      const SizedBox(height: 12),
+      if (cloudHistoryLoading)
+        const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
+      if (cloudHistoryError != null)
+        _empty('No se pudo cargar la comparación: $cloudHistoryError'),
+      if (!cloudHistoryLoading && cloudHistoryError == null && cloudPreviousSlateGames.isEmpty)
+        _empty('Todavía no hay una jornada anterior completamente evaluada. Cuando termine una jornada con pronósticos guardados, aparecerán aquí automáticamente.'),
+      if (cloudPreviousSlateGames.isNotEmpty) ...[
+        Card(child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('JORNADA NBA · ${cloudPreviousSlateDate ?? "—"}',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _metric('Partidos', '${cloudPreviousSlateGames.length}')),
+              const SizedBox(width: 8),
+              Expanded(child: _metric('Ganadores acertados',
+                '${cloudPreviousSlateWinnerCorrect}/${cloudPreviousSlateGames.length}')),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: _metric('Precisión',
+                cloudPreviousSlateWinnerAccuracyPct == null ? '—' : '${cloudPreviousSlateWinnerAccuracyPct!.toStringAsFixed(1)}%')),
+              const SizedBox(width: 8),
+              Expanded(child: _metric('Error medio marcador',
+                cloudPreviousSlateAverageScoreError == null ? '—' : '${cloudPreviousSlateAverageScoreError!.toStringAsFixed(1)} pts')),
+            ]),
+            if (cloudPreviousSlateAverageMarginError != null)
+              Text('Error medio del margen: ${cloudPreviousSlateAverageMarginError!.toStringAsFixed(1)} puntos',
+                style: Theme.of(context).textTheme.bodySmall),
+          ]),
+        )),
+        const SizedBox(height: 8),
+        ...cloudPreviousSlateGames.map(_previousSlateGameCard),
+      ],
+    ]),
+  );
+
+  Widget _previousSlateGameCard(NbaStoredPrediction p) {
+    final actualAway = (p.actual?['away_score'] as num?)?.toDouble();
+    final actualHome = (p.actual?['home_score'] as num?)?.toDouble();
+    final actualWinner = actualAway == null || actualHome == null
+        ? '—' : (actualAway > actualHome ? p.awayTeam : p.homeTeam);
+    final winnerCorrect = p.errorMetrics?['winner_correct'] == true;
+    final homeError = (p.errorMetrics?['home_score_abs_error'] as num?)?.toDouble();
+    final awayError = (p.errorMetrics?['away_score_abs_error'] as num?)?.toDouble();
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(p.scheduledStart == null ? 'Fecha no disponible' : p.scheduledStart!.toLocal().toString().substring(0, 16),
+            style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Text('${p.awayTeam} vs ${p.homeTeam}',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Divider(),
+          const Text('PRONÓSTICO ORIGINAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          Text('${p.awayTeam}: ${p.predictedAwayScore.toStringAsFixed(0)}  ·  ${p.homeTeam}: ${p.predictedHomeScore.toStringAsFixed(0)}'),
+          Text('Ganador previsto: ${p.predictedWinner} · Prob. local: ${p.homeWinProbability.toStringAsFixed(1)}%'),
+          const SizedBox(height: 8),
+          const Text('RESULTADO FINAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          Text('${p.awayTeam}: ${actualAway?.toStringAsFixed(0) ?? "—"}  ·  ${p.homeTeam}: ${actualHome?.toStringAsFixed(0) ?? "—"}'),
+          Text('Ganador real: $actualWinner'),
+          const SizedBox(height: 8),
+          Row(children: [
+            Icon(winnerCorrect ? Icons.check_circle : Icons.cancel,
+              color: winnerCorrect ? Colors.greenAccent : Colors.orangeAccent, size: 18),
+            const SizedBox(width: 6),
+            Expanded(child: Text(winnerCorrect ? 'Ganador acertado' : 'Ganador fallado',
+              style: TextStyle(fontWeight: FontWeight.bold,
+                color: winnerCorrect ? Colors.greenAccent : Colors.orangeAccent))),
+          ]),
+          Text('Error de puntos · visitante: ${awayError?.toStringAsFixed(1) ?? "—"} · local: ${homeError?.toStringAsFixed(1) ?? "—"}'),
+          Text('Modelo: ${p.modelVersion}', style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
+    );
+  }
 
   Widget _historyPage() => RefreshIndicator(
     onRefresh: refreshCloudHistory,
