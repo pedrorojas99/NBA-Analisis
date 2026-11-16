@@ -20,6 +20,10 @@ type TeamGame = {
 
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, error: "Use POST" }, 405);
@@ -27,6 +31,13 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Unauthorized" }, 401);
   }
   if (!SERVICE_KEY) return json({ ok: false, error: "Server database credentials are not configured" }, 500);
+  let persistRequested = false;
+  try {
+    const body = await req.json();
+    persistRequested = body?.persist === true;
+  } catch {
+    // Empty bodies preserve read-only behavior for older clients.
+  }
 
   const supabase = createClient(PROJECT_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -88,9 +99,19 @@ Deno.serve(async (req: Request) => {
       : { data: [], error: null };
     if (teamsError) throw new Error("Teams query failed: " + teamsError.message);
     const teamById = new Map((teams ?? []).map((team: any) => [team.id, team]));
+    let modelVersionId: string | null = null;
+    if (persistRequested) {
+      const { data: modelVersion, error: modelVersionError } = await supabase
+        .from("model_versions").select("id").eq("version_name", "rolling-form-0.1").maybeSingle();
+      if (modelVersionError || !modelVersion) {
+        throw new Error("Prediction model version is not registered: " + (modelVersionError?.message ?? "missing model row"));
+      }
+      modelVersionId = modelVersion.id;
+    }
 
     const forecasts: any[] = [];
     const skipped: any[] = [];
+    const predictionRows: any[] = [];
     for (const game of upcomingGames ?? []) {
       const homeHistory = (teamHistory.get(game.home_team_id) ?? []).slice(0, 10);
       const awayHistory = (teamHistory.get(game.away_team_id) ?? []).slice(0, 10);
@@ -119,7 +140,7 @@ Deno.serve(async (req: Request) => {
       const margin = predictedHome - predictedAway;
       const homeWinProbability = clamp(1 / (1 + Math.exp(-margin / 7.5)), 0.05, 0.95);
 
-      forecasts.push({
+      const forecast = {
         game_id: game.id,
         scheduled_start: game.scheduled_start,
         home_team: home?.display_name ?? "Local",
@@ -139,7 +160,29 @@ Deno.serve(async (req: Request) => {
         model_version: "rolling-form-0.1",
         model_type: "experimental_statistical_baseline",
         feature_cutoff_at: nowIso,
-      });
+      };
+      forecasts.push(forecast);
+      if (persistRequested && modelVersionId) {
+        const inputSnapshot = { game_id: game.id, home_history: homeHistory, away_history: awayHistory, home_advantage: homeAdvantage };
+        predictionRows.push({
+          game_id: game.id, model_version_id: modelVersionId, feature_cutoff_at: nowIso,
+          prediction_type: "game", target_key: "winner_and_score", forecast,
+          input_snapshot_sha256: await sha256(JSON.stringify(inputSnapshot)),
+        });
+      }
+    }
+
+    let predictionsPersisted = 0;
+    if (persistRequested && predictionRows.length) {
+      for (let offset = 0; offset < predictionRows.length; offset += 50) {
+        const { data: inserted, error: persistError } = await supabase.from("predictions")
+          .upsert(predictionRows.slice(offset, offset + 50), {
+            onConflict: "game_id,model_version_id,prediction_type,target_key,input_snapshot_sha256",
+            ignoreDuplicates: true,
+          }).select("id");
+        if (persistError) throw new Error("Prediction history persistence failed: " + persistError.message);
+        predictionsPersisted += inserted?.length ?? 0;
+      }
     }
 
     return json({
@@ -161,6 +204,8 @@ Deno.serve(async (req: Request) => {
         upcoming_games: upcomingGames?.length ?? 0,
         forecasts_generated: forecasts.length,
         games_skipped: skipped.length,
+        persistence_requested: persistRequested,
+        predictions_persisted: predictionsPersisted,
       },
     });
   } catch (error) {
