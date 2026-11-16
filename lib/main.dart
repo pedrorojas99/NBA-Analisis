@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/home_screen.dart';
 
@@ -11,45 +12,121 @@ Future<void> main() async {
   runApp(const NbaAnalyticsApp());
 }
 
-class NbaAnalyticsApp extends StatelessWidget {
+class NbaAnalyticsApp extends StatefulWidget {
   const NbaAnalyticsApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'NBA Analytics',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1769AA),
-          brightness: Brightness.light,
-          primary: const Color(0xFF1769AA),
-          secondary: const Color(0xFFEF8A4C),
-          surface: Colors.white,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF7F9FC),
-        iconTheme: const IconThemeData(size: 20),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF17324D),
-          elevation: 0,
-          surfaceTintColor: Colors.white,
-        ),
-        cardTheme: const CardThemeData(
-          color: Colors.white,
-          elevation: 1,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
-        ),
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Colors.white,
-          indicatorColor: Color(0xFFDCEBFA),
-          labelTextStyle: WidgetStatePropertyAll(TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        useMaterial3: true,
+  State<NbaAnalyticsApp> createState() => _NbaAnalyticsAppState();
+}
+
+class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
+  int themeIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => themeIndex = prefs.getInt('nba_theme_index')?.clamp(0, 2) ?? 0);
+  }
+
+  Future<void> _setTheme(int value) async {
+    final safeValue = value.clamp(0, 2);
+    setState(() => themeIndex = safeValue);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('nba_theme_index', safeValue);
+  }
+
+  ThemeData _buildTheme({
+    required Color seed,
+    required Color background,
+    required Color surface,
+    required Color appBarForeground,
+    required Brightness brightness,
+    required Color secondary,
+  }) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+    ).copyWith(
+      primary: seed,
+      secondary: secondary,
+      surface: surface,
+    );
+    return ThemeData(
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: background,
+      iconTheme: IconThemeData(size: 20, color: scheme.onSurface),
+      appBarTheme: AppBarTheme(
+        backgroundColor: surface,
+        foregroundColor: appBarForeground,
+        elevation: 0,
+        surfaceTintColor: surface,
       ),
-      home: const HomeScreen(),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: brightness == Brightness.dark ? 2 : 1,
+        margin: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: secondary.withValues(alpha: 0.20),
+        labelTextStyle: const WidgetStatePropertyAll(
+          TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      useMaterial3: true,
     );
   }
+
+  ThemeData get _theme {
+    switch (themeIndex) {
+      case 1:
+        return _buildTheme(
+          seed: const Color(0xFFB85C38),
+          secondary: const Color(0xFFD99A52),
+          background: const Color(0xFFFFF5EA),
+          surface: const Color(0xFFFFFCF7),
+          appBarForeground: const Color(0xFF4A2D22),
+          brightness: Brightness.light,
+        );
+      case 2:
+        return _buildTheme(
+          seed: const Color(0xFFE09A45),
+          secondary: const Color(0xFFC86B4A),
+          background: const Color(0xFF211B19),
+          surface: const Color(0xFF302521),
+          appBarForeground: const Color(0xFFFFE8CE),
+          brightness: Brightness.dark,
+        );
+      default:
+        return _buildTheme(
+          seed: const Color(0xFF1769AA),
+          secondary: const Color(0xFFEF8A4C),
+          background: const Color(0xFFF7F9FC),
+          surface: Colors.white,
+          appBarForeground: const Color(0xFF17324D),
+          brightness: Brightness.light,
+        );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'NBA Analytics',
+    debugShowCheckedModeBanner: false,
+    theme: _theme,
+    home: HomeScreen(
+      themeIndex: themeIndex,
+      onThemeChanged: _setTheme,
+    ),
+  );
 }
