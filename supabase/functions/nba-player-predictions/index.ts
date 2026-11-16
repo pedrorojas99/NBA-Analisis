@@ -6,7 +6,7 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
-const MODEL_VERSION = "player-starter-form-0.1";
+const MODEL_VERSION = "player-starter-form-0.2";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" },
@@ -218,8 +218,8 @@ Deno.serve(async (req: Request) => {
         const { data: created, error: createError } = await supabase.from("model_versions").insert({
           version_name: MODEL_VERSION,
           feature_set_version: "player-starter-features-0.1",
-          model_description: "Proyecciones experimentales de puntos, rebotes, asistencias y triples para titulares confirmados y sin lesión reportada por ESPN.",
-          parameters: { method: "blend_last5_last10_60_40", min_games: 5, max_games: 10, availability_gate: "espn_confirmed_starter_and_complete_injury_report" },
+          model_description: "Proyecciones experimentales de puntos, rebotes, asistencias y triples para titulares activos confirmados por ESPN; la disponibilidad se marca como no verificada cuando el informe de lesiones está incompleto.",
+          parameters: { method: "blend_last5_last10_60_40", min_games: 3, max_games: 10, availability_gate: "espn_confirmed_active_starter" },
           validation_metrics: { status: "not_yet_validated", note: "No promover sin backtest cronológico de jugadores." },
           status: "experimental",
         }).select("id").single();
@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
           continue;
         }
         const history = (historyByPlayer.get(playerId) ?? []).filter((r: any) => r.team_id === candidate.team_id).slice(0, 10);
-        if (history.length < 5) {
+        if (history.length < 3) {
           skipped.push({ game_id: candidate.game_id, player: candidate.player_name, reason: "insufficient_valid_history", sample: history.length });
           continue;
         }
