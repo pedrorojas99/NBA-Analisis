@@ -72,18 +72,29 @@ class NbaPredictionData {
 
 class NbaPredictionService {
   Future<NbaPredictionData> load() async {
-    final response = await Supabase.instance.client.functions.invoke(
-      'nba-predictions',
-      body: const {'persist': true},
-    );
-    if (response.status < 200 || response.status >= 300) {
-      throw Exception('El motor de predicciones respondió con código ${response.status}');
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await Supabase.instance.client.functions.invoke(
+          'nba-predictions',
+          body: const {'persist': true},
+        );
+        if (response.status < 200 || response.status >= 300) {
+          throw Exception('El motor de predicciones respondió con código ${response.status}');
+        }
+        if (response.data is! Map) throw Exception('Respuesta del motor de predicciones inválida.');
+        final body = Map<String, dynamic>.from(response.data as Map);
+        if (body['ok'] != true) {
+          throw Exception((body['error'] ?? 'No se pudieron generar los pronósticos.').toString());
+        }
+        return NbaPredictionData.fromJson(body);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+        }
+      }
     }
-    if (response.data is! Map) throw Exception('Respuesta del motor de predicciones inválida.');
-    final body = Map<String, dynamic>.from(response.data as Map);
-    if (body['ok'] != true) {
-      throw Exception((body['error'] ?? 'No se pudieron generar los pronósticos.').toString());
-    }
-    return NbaPredictionData.fromJson(body);
+    throw Exception('No se pudo consultar el motor de predicciones después de 3 intentos: $lastError');
   }
 }
