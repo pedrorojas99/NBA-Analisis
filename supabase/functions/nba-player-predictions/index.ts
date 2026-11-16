@@ -264,15 +264,16 @@ Deno.serve(async (req: Request) => {
       const finalSet = new Set(finalGameIds);
       const gameById = new Map(historicalGames.map((g: any) => [g.id, g]));
       const historyByPlayer = new Map<string, any[]>();
-      const actualByPlayerGame = new Map<string, any>();
+      const seenPlayerGames = new Set<string>();
       for (const row of statRows) {
         if (!finalSet.has(row.game_id)) continue;
+        const key = `${row.game_id}:${row.player_id}`;
+        if (seenPlayerGames.has(key)) continue;
+        seenPlayerGames.add(key); // Query is newest-first: keep only the latest snapshot for each player/game.
         const normalized = normalizedStatRow(row.stats);
         if (!normalized) continue;
         const game = gameById.get(row.game_id);
         if (!game || Date.parse(game.scheduled_start) >= Date.parse(slateGames[0].scheduled_start)) continue;
-        const key = `${row.game_id}:${row.player_id}`;
-        actualByPlayerGame.set(key, normalized);
         if (!historyByPlayer.has(row.player_id)) historyByPlayer.set(row.player_id, []);
         historyByPlayer.get(row.player_id)!.push({ ...normalized, game_id: row.game_id, team_id: row.team_id, date: Date.parse(game.scheduled_start) });
       }
