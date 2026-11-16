@@ -7,6 +7,65 @@ import '../services/nba_prediction_history_service.dart';
 import '../services/nba_player_prediction_service.dart';
 import 'player_stats_screen.dart';
 
+class _NbaAnalyticsLogo extends StatelessWidget {
+  final double size;
+  const _NbaAnalyticsLogo({required this.size});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size, height: size,
+    child: Stack(children: [
+      CustomPaint(size: Size(size, size), painter: _BasketballLogoPainter()),
+      Positioned(right: 0, bottom: 0, child: Container(
+        width: size * .43, height: size * .43,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1769AA),
+          border: Border.all(color: const Color(0xFF10141D), width: 1.5),
+          borderRadius: BorderRadius.circular(size),
+        ),
+        alignment: Alignment.center,
+        child: Text('A', style: TextStyle(
+          color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * .25,
+        )),
+      )),
+    ]),
+  );
+}
+
+class _BasketballLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * .45;
+    final ball = Paint()..color = const Color(0xFFEF6C35);
+    final lines = Paint()
+      ..color = const Color(0xFF20202A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * .055;
+    canvas.drawCircle(center, radius, ball);
+    canvas.drawCircle(center, radius, lines);
+    canvas.drawLine(Offset(center.dx - radius, center.dy),
+        Offset(center.dx + radius, center.dy), lines);
+    canvas.drawLine(Offset(center.dx, center.dy - radius),
+        Offset(center.dx, center.dy + radius), lines);
+    final leftArc = Path()
+      ..moveTo(center.dx - radius * .25, center.dy - radius * .97)
+      ..cubicTo(center.dx - radius * .85, center.dy - radius * .35,
+          center.dx - radius * .85, center.dy + radius * .35,
+          center.dx - radius * .25, center.dy + radius * .97);
+    final rightArc = Path()
+      ..moveTo(center.dx + radius * .25, center.dy - radius * .97)
+      ..cubicTo(center.dx + radius * .85, center.dy - radius * .35,
+          center.dx + radius * .85, center.dy + radius * .35,
+          center.dx + radius * .25, center.dy + radius * .97);
+    canvas.drawPath(leftArc, lines);
+    canvas.drawPath(rightArc, lines);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -164,13 +223,15 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        title: Row(mainAxisSize: MainAxisSize.min, children: [
+          const _NbaAnalyticsLogo(size: 34),
+          const SizedBox(width: 10),
+          const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        ]),
         actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }, icon: const Icon(Icons.refresh))],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
-      floatingActionButton: tab == 2 ? FloatingActionButton.extended(
-        onPressed: addPrediction, icon: const Icon(Icons.add), label: const Text('Registrar pronóstico'),
-      ) : null,
+      floatingActionButton: null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (v) => setState(() => tab = v),
@@ -456,13 +517,20 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _gamesPage() => RefreshIndicator(
-    onRefresh: refresh,
+    onRefresh: () async {
+      await Future.wait([
+        refreshNbaData(),
+        refreshPredictions(),
+        refreshPlayerPredictions(),
+      ]);
+    },
     child: ListView(padding: const EdgeInsets.all(16), children: [
-      _notice(),
-      const SizedBox(height: 14),
-      _section('Pronósticos registrados'),
-      if (predictions.isEmpty) _empty('Todavía no hay pronósticos. Registra uno antes del inicio del partido.'),
-      ...predictions.map((p) => _predictionCard(p, allowResult: !p.isSettled)),
+      _section('Pronósticos automáticos'),
+      const Text('NBA Analytics consulta el calendario y las estadísticas históricas, calcula los marcadores y guarda cada pronóstico en la nube. No necesitas introducir equipos ni puntos manualmente.'),
+      const SizedBox(height: 12),
+      _predictionSection(),
+      const SizedBox(height: 12),
+      _playerPredictionSection(),
     ]),
   );
 
