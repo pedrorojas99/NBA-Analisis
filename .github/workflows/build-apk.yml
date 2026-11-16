@@ -44,9 +44,9 @@ jobs:
           sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@drawable/ic_launcher"|' android/app/src/main/AndroidManifest.xml
           sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
           sed -i '/<application/i\    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />' android/app/src/main/AndroidManifest.xml
-      - run: rm -rf test
       - run: flutter pub get
-      - run: flutter analyze lib --no-fatal-infos
+      - run: flutter test
+      - run: flutter analyze lib test --no-fatal-infos
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
