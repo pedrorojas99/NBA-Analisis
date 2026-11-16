@@ -100,12 +100,12 @@ class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
         );
       case 2:
         return _buildTheme(
-          seed: const Color(0xFFE09A45),
-          secondary: const Color(0xFFC86B4A),
-          background: const Color(0xFF211B19),
-          surface: const Color(0xFF302521),
-          appBarForeground: const Color(0xFFFFE8CE),
-          brightness: Brightness.dark,
+          seed: const Color(0xFFA84D2C),
+          secondary: const Color(0xFFE7A34B),
+          background: const Color(0xFFFFF0E6),
+          surface: const Color(0xFFFFF9F4),
+          appBarForeground: const Color(0xFF4B281E),
+          brightness: Brightness.light,
         );
       default:
         return _buildTheme(
