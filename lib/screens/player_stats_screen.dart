@@ -124,7 +124,6 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
       (p['name'] ?? '').toString().toLowerCase().contains(search.toLowerCase())).toList();
     final selectedMatches = players.where((p) => p['id'] == selectedPlayerId).toList();
     final selected = selectedMatches.isEmpty ? null : selectedMatches.first;
-    final dropdownPlayerId = filteredPlayers.any((p) => p['id'] == selectedPlayerId) ? selectedPlayerId : null;
     final seasonGames = selectedSeason == null
         ? games
         : games.where((g) => g['season_start_year'] == selectedSeason).toList();
