@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
     for (const [sourceGameId, entry] of eventsById) {
       eventsSeen++;
       const event = entry.event;
-      if (!event.date || Date.parse(event.date) < todayUtc.getTime()) { skipped++; continue; }
+      if (!event.date || Date.parse(event.date) < todayUtc.getTime() || event.status?.type?.state !== "pre") { skipped++; continue; }
       const competition = event.competitions?.[0];
       const competitors = competition?.competitors ?? [];
       const home = competitors.find((side: any) => side.homeAway === "home");
