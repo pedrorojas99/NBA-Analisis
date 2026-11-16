@@ -4,7 +4,12 @@ const SECRET_KEYS = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
 const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ?? "{}");
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
-const teamLogoSlug = (value: unknown) => {\n  const abbr = String(value ?? "").toUpperCase();\n  const aliases: Record<string, string> = { GSW: "gs", NY: "ny", NO: "no", SA: "sa", UTAH: "utah" };\n  return aliases[abbr] ?? abbr.toLowerCase();\n};\nconst json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+const teamLogoSlug = (value: unknown) => {
+  const abbr = String(value ?? "").toUpperCase();
+  const aliases: Record<string, string> = { GSW: "gs", NY: "ny", NO: "no", SA: "sa", UTAH: "utah" };
+  return aliases[abbr] ?? abbr.toLowerCase();
+};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" }
 });
 Deno.serve(async (req: Request) => {
@@ -18,9 +23,9 @@ Deno.serve(async (req: Request) => {
       const { data: teamRows, error: teamError } = await supabase.from("teams")
         .select("id,abbreviation,display_name,city").order("display_name", { ascending: true });
       if (teamError) throw new Error("Team catalog query failed: " + teamError.message);
-      const teamsOut = (teamRows ?? []).map((team: any) => ({
+      const teamsOut = (teamRows ?? []).filter((team: any) => team.abbreviation !== "TBD").map((team: any) => ({
         ...team,
-        logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${String(team.abbreviation ?? "").toLowerCase()}.png`
+        logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(team.abbreviation)}.png`
       }));
       const teamId = typeof body?.team_id === "string" ? body.team_id : null;
       if (!teamId) return json({ ok: true, teams: teamsOut, team: null, summary: null, recent_games: [] });
