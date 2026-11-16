@@ -39,7 +39,7 @@ class AppUpdateService {
 
     final release = jsonDecode(response.body) as Map<String, dynamic>;
     final tag = (release['tag_name'] ?? '').toString();
-    final match = RegExp(r'^build-(\d+)$').firstMatch(tag);
+    final match = RegExp(r'^build-(\\d+)$').firstMatch(tag);
     if (match == null) {
       throw Exception('La versión publicada no tiene un número válido.');
     }
@@ -65,7 +65,7 @@ class AppUpdateService {
 
   Future<void> downloadAndInstall(
     AppUpdateInfo update, {
-    void Function(double progress)? onProgress,
+    void Function(double? progress, int received, int total)? onProgress,
   }) async {
     final uri = Uri.parse(update.apkUrl);
     final request = http.Request('GET', uri);
@@ -73,7 +73,7 @@ class AppUpdateService {
     late final http.StreamedResponse response;
     try {
       response = await client.send(request)
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 45));
     } catch (_) {
       client.close();
       rethrow;
@@ -92,7 +92,11 @@ class AppUpdateService {
       await for (final chunk in response.stream) {
         sink.add(chunk);
         received += chunk.length;
-        if (total > 0) onProgress?.call(received / total);
+        onProgress?.call(
+          total > 0 ? (received / total).clamp(0.0, 1.0) : null,
+          received,
+          total,
+        );
       }
       await sink.flush();
     } finally {
@@ -102,6 +106,9 @@ class AppUpdateService {
 
     if (!await file.exists() || await file.length() < 1000000) {
       throw Exception('La descarga de la APK está incompleta.');
+    }
+    if (total > 0 && received < total) {
+      throw Exception('La descarga se interrumpió antes de completarse.');
     }
 
     final result = await OpenFilex.open(
