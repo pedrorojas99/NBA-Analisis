@@ -84,6 +84,40 @@ Deno.serve(async (req: Request) => {
         meta: { historical_games_available: history.length, source: "confirmed final game scores" }
       });
     }
+    if (body?.action === "game_stats") {
+      const gameId = typeof body?.game_id === "string" ? body.game_id : "";
+      if (!gameId) return json({ ok: false, error: "Se requiere game_id." }, 400);
+      const [{ data: game, error: gameError }, { data: teamRows, error: teamError }, { data: playerRows, error: playerError }] = await Promise.all([
+        supabase.from("games").select("id,scheduled_start,status,home_team_id,away_team_id").eq("id", gameId).maybeSingle(),
+        supabase.from("team_game_stats").select("team_id,stats,validation_status").eq("game_id", gameId).neq("validation_status", "rejected"),
+        supabase.from("player_game_stats").select("player_id,team_id,stats,validation_status").eq("game_id", gameId).neq("validation_status", "rejected")
+      ]);
+      if (gameError) throw new Error("Game lookup failed: " + gameError.message);
+      if (teamError) throw new Error("Game team stats query failed: " + teamError.message);
+      if (playerError) throw new Error("Game player stats query failed: " + playerError.message);
+      if (!game) return json({ ok: false, error: "Partido no encontrado." }, 404);
+      const teamIds = [...new Set([game.home_team_id, game.away_team_id])];
+      const playerIds = [...new Set((playerRows ?? []).map((row: any) => row.player_id))];
+      const [{ data: teams, error: teamsError }, { data: players, error: playersError }] = await Promise.all([
+        supabase.from("teams").select("id,display_name,abbreviation").in("id", teamIds),
+        playerIds.length ? supabase.from("players").select("id,display_name").in("id", playerIds) : Promise.resolve({ data: [], error: null })
+      ]);
+      if (teamsError) throw new Error("Game teams lookup failed: " + teamsError.message);
+      if (playersError) throw new Error("Game players lookup failed: " + playersError.message);
+      const teamById = new Map((teams ?? []).map((row: any) => [row.id, row]));
+      const playerById = new Map((players ?? []).map((row: any) => [row.id, row]));
+      return json({
+        ok: true, game,
+        team_stats: (teamRows ?? []).map((row: any) => ({
+          ...row, team_name: (teamById.get(row.team_id) as any)?.display_name ?? "Equipo",
+          team_abbreviation: (teamById.get(row.team_id) as any)?.abbreviation ?? ""
+        })),
+        player_stats: (playerRows ?? []).map((row: any) => ({
+          ...row, player_name: (playerById.get(row.player_id) as any)?.display_name ?? "Jugador",
+          team_abbreviation: (teamById.get(row.team_id) as any)?.abbreviation ?? ""
+        }))
+      });
+    }
     if (body?.action === "head_to_head") {
       const homeId = typeof body?.home_team_id === "string" ? body.home_team_id : "";
       const awayId = typeof body?.away_team_id === "string" ? body.away_team_id : "";
