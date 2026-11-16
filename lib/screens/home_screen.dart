@@ -288,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected: (v) => setState(() => tab = v),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
-          NavigationDestination(icon: Icon(Icons.person_search), label: 'Jugadores'),
+          NavigationDestination(icon: Icon(Icons.search), label: 'Buscar'),
           NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
