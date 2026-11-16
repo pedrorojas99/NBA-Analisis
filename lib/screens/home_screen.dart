@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? cloudHistoryError;
   int cloudEvaluatedCount = 0;
   int cloudPendingCount = 0;
+  List<NbaTeamErrorSummary> cloudTeamAnalysis = [];
   List<Prediction> predictions = [];
   bool loading = true;
 
@@ -73,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
         cloudPredictions = data.forecasts;
         cloudEvaluatedCount = data.evaluatedCount;
         cloudPendingCount = data.pendingCount;
+        cloudTeamAnalysis = data.teamAnalysis;
         cloudHistoryLoading = false;
       });
     } catch (e) {
@@ -411,6 +413,28 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  Widget _teamErrorCard(NbaTeamErrorSummary team) => Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(
+            team.abbreviation.isEmpty ? team.team : '${team.team} (${team.abbreviation})',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          )),
+          Text('${team.gamesEvaluated} partidos', style: Theme.of(context).textTheme.bodySmall),
+        ]),
+        const SizedBox(height: 5),
+        Text('Acierto del ganador: ${team.winnerAccuracyPct.toStringAsFixed(1)}% · Casa: ${team.homeGames} · Fuera: ${team.awayGames}'),
+        Text('Error medio de sus puntos: ${team.pointsMae.toStringAsFixed(1)} pts · Error del rival: ${team.opponentPointsMae.toStringAsFixed(1)} pts'),
+        Text('Sesgo: ${team.pointsBias > 0 ? '+' : ''}${team.pointsBias.toStringAsFixed(1)} pts · Error de margen: ${team.marginMae.toStringAsFixed(1)} pts'),
+        Text('Previsto: ${team.meanPredictedPoints.toStringAsFixed(1)} · Real: ${team.meanActualPoints.toStringAsFixed(1)}',
+          style: Theme.of(context).textTheme.bodySmall),
+      ]),
+    ),
+  );
+
   Widget _learningPage() {
     final done = predictions.where((p) => p.isSettled).toList();
     final correct = done.where((p) => p.predictedWinner == p.actualWinner).length;
@@ -448,6 +472,13 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 8),
         Expanded(child: _metric('Brier score', cloudBrier == null ? '—' : cloudBrier.toStringAsFixed(3))),
       ]),
+      const SizedBox(height: 16),
+      _section('Errores por equipo · pronósticos automáticos'),
+      const Text('El error de puntos mide cuánto se desvía el marcador previsto de cada equipo. El sesgo positivo indica que el modelo suele pronosticarle más puntos de los que anota; el negativo indica lo contrario.'),
+      if (cloudTeamAnalysis.isEmpty)
+        _empty('Todavía no hay pronósticos automáticos evaluados para comparar equipos. Esta sección se llenará después de que terminen las próximas jornadas.')
+      else
+        ...cloudTeamAnalysis.take(30).map(_teamErrorCard),
       const SizedBox(height: 16),
       Row(children: [
         Expanded(child: _metric('Partidos evaluados', '${done.length}')),
