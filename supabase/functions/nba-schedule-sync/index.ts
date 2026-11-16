@@ -44,11 +44,6 @@ Deno.serve(async (req: Request) => {
       if (error || !data) throw new Error(`Team upsert failed: ${error?.message}`);
       return { ...data, sourceId: String(team.id) };
     }));
-    const { error: teamMapError } = await supabase.from("team_source_ids").upsert(
-      savedTeams.map((team: any) => ({ source_name: "espn", source_team_id: team.sourceId, team_id: team.id })),
-      { onConflict: "source_name,source_team_id" },
-    );
-    if (teamMapError) throw new Error(`Team mapping upsert failed: ${teamMapError.message}`);
     const teamByAbbr = new Map(savedTeams.map((team: any) => [team.abbreviation, team]));
 
     const eventsById = new Map<string, any>();
