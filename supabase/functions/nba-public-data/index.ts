@@ -14,6 +14,108 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(PROJECT_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
     const body = await req.json().catch(() => ({}));
+    if (body?.action === "team_stats") {
+      const { data: teamRows, error: teamError } = await supabase.from("teams")
+        .select("id,abbreviation,display_name,city").order("display_name", { ascending: true });
+      if (teamError) throw new Error("Team catalog query failed: " + teamError.message);
+      const teamsOut = (teamRows ?? []).map((team: any) => ({
+        ...team,
+        logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${String(team.abbreviation ?? "").toLowerCase()}.png`
+      }));
+      const teamId = typeof body?.team_id === "string" ? body.team_id : null;
+      if (!teamId) return json({ ok: true, teams: teamsOut, team: null, summary: null, recent_games: [] });
+      const selected = (teamRows ?? []).find((team: any) => team.id === teamId);
+      if (!selected) return json({ ok: false, error: "Equipo no encontrado." }, 404);
+      const nowIso = new Date().toISOString();
+      const { data: teamGames, error: gamesError } = await supabase.from("games")
+        .select("id,season,scheduled_start,home_team_id,away_team_id")
+        .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+        .lt("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(500);
+      if (gamesError) throw new Error("Team history query failed: " + gamesError.message);
+      const ids = (teamGames ?? []).map((game: any) => game.id);
+      const resultRows: any[] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const { data, error } = await supabase.from("game_results")
+          .select("game_id,home_score,away_score,is_final")
+          .in("game_id", ids.slice(offset, offset + 100)).eq("is_final", true);
+        if (error) throw new Error("Team results query failed: " + error.message);
+        resultRows.push(...(data ?? []));
+      }
+      const resultById = new Map(resultRows.map((row: any) => [row.game_id, row]));
+      const teamById = new Map((teamRows ?? []).map((team: any) => [team.id, team]));
+      const history = (teamGames ?? []).flatMap((game: any) => {
+        const result: any = resultById.get(game.id);
+        if (!result) return [];
+        const isHome = game.home_team_id === teamId;
+        const scored = Number(isHome ? result.home_score : result.away_score);
+        const conceded = Number(isHome ? result.away_score : result.home_score);
+        if (!Number.isFinite(scored) || !Number.isFinite(conceded)) return [];
+        const opponent = teamById.get(isHome ? game.away_team_id : game.home_team_id) as any;
+        return [{
+          game_id: game.id, date: game.scheduled_start, season: game.season,
+          opponent: opponent?.display_name ?? "Rival",
+          opponent_abbreviation: opponent?.abbreviation ?? "",
+          opponent_logo_url: opponent ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(opponent.abbreviation ?? "").toLowerCase()}.png` : null,
+          team_score: scored, opponent_score: conceded, won: scored > conceded,
+          home_away: isHome ? "Local" : "Visitante"
+        }];
+      }).sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
+      const wins = history.filter((game: any) => game.won).length;
+      const losses = history.length - wins;
+      const avg = (values: number[]) => values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) : null;
+      return json({
+        ok: true, teams: teamsOut,
+        team: { ...selected, logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${String(selected.abbreviation ?? "").toLowerCase()}.png` },
+        summary: {
+          games: history.length, wins, losses,
+          win_pct: history.length ? Number((100 * wins / history.length).toFixed(1)) : null,
+          points_for: avg(history.map((g: any) => g.team_score)),
+          points_against: avg(history.map((g: any) => g.opponent_score)),
+          point_diff: avg(history.map((g: any) => g.team_score - g.opponent_score)),
+          last10_wins: history.slice(0, 10).filter((g: any) => g.won).length,
+          last10_losses: history.slice(0, 10).filter((g: any) => !g.won).length
+        },
+        recent_games: history.slice(0, 20),
+        meta: { historical_games_available: history.length, source: "confirmed final game scores" }
+      });
+    }
+    if (body?.action === "head_to_head") {
+      const homeId = typeof body?.home_team_id === "string" ? body.home_team_id : "";
+      const awayId = typeof body?.away_team_id === "string" ? body.away_team_id : "";
+      if (!homeId || !awayId || homeId === awayId) return json({ ok: false, error: "Se requieren dos equipos válidos." }, 400);
+      const nowIso = new Date().toISOString();
+      const { data: games, error: gamesError } = await supabase.from("games")
+        .select("id,scheduled_start,home_team_id,away_team_id")
+        .or(`and(home_team_id.eq.${homeId},away_team_id.eq.${awayId}),and(home_team_id.eq.${awayId},away_team_id.eq.${homeId})`)
+        .lt("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(30);
+      if (gamesError) throw new Error("Head-to-head games query failed: " + gamesError.message);
+      const ids = (games ?? []).map((game: any) => game.id);
+      const [{ data: results, error: resultsError }, { data: teamRows, error: teamsError }] = await Promise.all([
+        ids.length ? supabase.from("game_results").select("game_id,home_score,away_score,is_final").in("game_id", ids).eq("is_final", true) : Promise.resolve({ data: [], error: null }),
+        supabase.from("teams").select("id,display_name,abbreviation").in("id", [homeId, awayId])
+      ]);
+      if (resultsError) throw new Error("Head-to-head results query failed: " + resultsError.message);
+      if (teamsError) throw new Error("Head-to-head teams query failed: " + teamsError.message);
+      const resultById = new Map((results ?? []).map((row: any) => [row.game_id, row]));
+      const teamById = new Map((teamRows ?? []).map((team: any) => [team.id, team]));
+      const meetings = (games ?? []).flatMap((game: any) => {
+        const result: any = resultById.get(game.id);
+        if (!result) return [];
+        const home = teamById.get(game.home_team_id) as any;
+        const away = teamById.get(game.away_team_id) as any;
+        const homeScore = Number(result.home_score), awayScore = Number(result.away_score);
+        return [{
+          game_id: game.id, date: game.scheduled_start,
+          home_team: home?.display_name ?? "Local", away_team: away?.display_name ?? "Visitante",
+          home_abbreviation: home?.abbreviation ?? "", away_abbreviation: away?.abbreviation ?? "",
+          home_logo_url: home ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(home.abbreviation ?? "").toLowerCase()}.png` : null,
+          away_logo_url: away ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(away.abbreviation ?? "").toLowerCase()}.png` : null,
+          home_score: homeScore, away_score: awayScore,
+          winner: homeScore > awayScore ? (home?.display_name ?? "Local") : (away?.display_name ?? "Visitante")
+        }];
+      }).slice(0, 5);
+      return json({ ok: true, games: meetings, meta: { returned: meetings.length, requested: 5 } });
+    }
     if (body?.action === "player_stats") {
       // PostgREST may cap responses at 1,000 rows even when a larger limit is requested.
       // Page through the full eligible stats index so players beyond the first page are not omitted.
