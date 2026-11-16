@@ -377,12 +377,8 @@ Deno.serve(async (req: Request) => {
         if (forecast.starter_confirmed !== true || forecast.injury_clear !== true) continue;
         const game = slateGames.find((g: any) => g.id === row.game_id);
         if (!game) continue;
-        if (game.status === "scheduled" && Date.parse(game.scheduled_start) > now.getTime()) {
-          const ids = candidateIdsByGame.get(game.id) ?? new Set<string>();
-          const mapping = (await supabase.from("player_source_ids").select("source_player_id")
-            .eq("source_name", "espn").eq("player_id", forecast.player_id).maybeSingle()).data?.source_player_id;
-          if (!mapping || !ids.has(String(mapping))) continue;
-        }
+        // Keep the original pre-game availability verification in the immutable forecast.
+        // A temporary ESPN injury-report outage must not hide a previously validated prediction.
         forecasts.push(forecast);
       }
     }

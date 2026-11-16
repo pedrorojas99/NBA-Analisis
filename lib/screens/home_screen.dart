@@ -522,6 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
           homeTeam: game?.homeTeam,
           awayTeam: game?.awayTeam,
           players: players,
+          showHeadToHead: false,
         );
       }),
       if (playerPredictionLoading)
@@ -550,18 +551,18 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: isPending ? () => _openGameAnalysis(game) : null,
+        onTap: (isPending || isFinal) ? () => _openGameAnalysis(game) : null,
         child: Padding(padding: const EdgeInsets.all(12), child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('Hora · ' + game.scheduledStart.toLocal().toString().substring(11, 16),
                   style: Theme.of(context).textTheme.bodySmall),
-              if (isPending)
+              if (isPending || isFinal)
                 TextButton.icon(
                   onPressed: () => _openGameAnalysis(game),
                   icon: const Icon(Icons.analytics_outlined, size: 16),
-                  label: const Text('PENDIENTE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  label: Text(isFinal ? 'VER ESTADÍSTICAS' : 'ANALIZAR', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     minimumSize: Size.zero,

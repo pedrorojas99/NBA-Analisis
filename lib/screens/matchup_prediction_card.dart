@@ -9,10 +9,12 @@ class MatchupPredictionCard extends StatefulWidget {
   final NbaTeam? homeTeam;
   final NbaTeam? awayTeam;
   final List<NbaPlayerForecast> players;
+  final bool showHeadToHead;
 
   const MatchupPredictionCard({
     super.key, required this.forecast, required this.homeTeam,
     required this.awayTeam, required this.players,
+    this.showHeadToHead = true,
   });
 
   @override
@@ -174,15 +176,18 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     margin: const EdgeInsets.only(bottom: 12),
     clipBehavior: Clip.antiAlias,
     child: DefaultTabController(
-      length: 2,
+      length: widget.showHeadToHead ? 2 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 4), child: Row(children: [
           const Icon(Icons.calendar_today, size: 15, color: Color(0xFF1769AA)),
           const SizedBox(width: 7),
           Text(widget.forecast.scheduledStart.toLocal().toString().substring(0, 16), style: const TextStyle(fontSize: 12, color: Color(0xFF667788))),
         ])),
-        const TabBar(tabs: [Tab(text: 'Pronóstico'), Tab(text: 'Enfrentamientos')]),
-        SizedBox(height: 440, child: TabBarView(children: [_predictionTab(), _headToHeadTab()])),
+        if (widget.showHeadToHead)
+          const TabBar(tabs: [Tab(text: 'Pronóstico'), Tab(text: 'Enfrentamientos')]),
+        SizedBox(height: 440, child: widget.showHeadToHead
+          ? TabBarView(children: [_predictionTab(), _headToHeadTab()])
+          : _predictionTab()),
       ]),
     ),
   );
