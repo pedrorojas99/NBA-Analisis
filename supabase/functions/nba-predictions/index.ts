@@ -140,16 +140,20 @@ Deno.serve(async (req: Request) => {
     const predictionRows: any[] = [];
     let slateForecastsReused = 0;
 
-    // Once a slate has started, never recalculate or replace its forecasts.
-    // Return the original stored snapshots so the APK can still display them.
-    if (slateStatus === "in_progress" && persistRequested && modelVersionId && slateGames.length) {
+    // Reuse the newest immutable forecast for every game in the current slate.
+    // This prevents each 15-minute cron run from creating another snapshot for the same game.
+    // If the slate has started, only stored forecasts are returned; no late recalculation is allowed.
+    const seenGames = new Set<string>();
+    if (persistRequested && modelVersionId && slateGames.length) {
       const slateGameIds = slateGames.map((game: any) => game.id);
       const { data: storedSlatePredictions, error: storedSlateError } = await supabase
         .from("predictions").select("game_id,forecast,created_at")
-        .in("game_id", slateGameIds).eq("model_version_id", modelVersionId)
+        .in("game_id", slateGameIds)
+        .eq("model_version_id", modelVersionId)
+        .eq("prediction_type", "game")
+        .eq("target_key", "winner_and_score")
         .order("created_at", { ascending: false });
       if (storedSlateError) throw new Error("Current slate forecast lookup failed: " + storedSlateError.message);
-      const seenGames = new Set<string>();
       for (const row of storedSlatePredictions ?? []) {
         if (seenGames.has(row.game_id)) continue;
         seenGames.add(row.game_id);
@@ -158,6 +162,7 @@ Deno.serve(async (req: Request) => {
       }
     }
     for (const game of upcomingGames ?? []) {
+      if (seenGames.has(game.id)) continue;
       const homeHistory = (teamHistory.get(game.home_team_id) ?? []).slice(0, 10);
       const awayHistory = (teamHistory.get(game.away_team_id) ?? []).slice(0, 10);
       const home = teamById.get(game.home_team_id) as any;
