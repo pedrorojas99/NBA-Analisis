@@ -47,10 +47,15 @@ Deno.serve(async (req: Request) => {
     const now = new Date();
     const nowIso = now.toISOString();
     const futureIso = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    const slateWindowStart = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
-    const nbaDateKey = (value: string) => new Intl.DateTimeFormat("en-CA", {
+    const slateWindowStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const nbaDateFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
-    }).format(new Date(value));
+    });
+    const nbaDateKey = (value: string) => {
+      const parts = Object.fromEntries(nbaDateFormatter.formatToParts(new Date(value))
+        .map((part) => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    };
 
     const { data: historicalGames, error: historyError } = await supabase
       .from("games")
