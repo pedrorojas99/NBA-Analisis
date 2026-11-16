@@ -14,7 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set unique Android build number
-        run: sed -i "s/^version:.*/version: 0.3.0+${GITHUB_RUN_NUMBER}/" pubspec.yaml
+        run: |
+          sed -i "s/^version:.*/version: 0.3.0+${GITHUB_RUN_NUMBER}/" pubspec.yaml
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
