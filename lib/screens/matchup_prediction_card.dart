@@ -110,9 +110,9 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     );
   }
 
-  Widget _predictionTab() {
+  Widget _predictionContent() {
     final f = widget.forecast;
-    return ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 16), children: [
+    return Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Column(children: [
           _teamLogo(widget.awayTeam?.abbreviation),
@@ -135,8 +135,13 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       const Text('Se muestran titulares activos confirmados por ESPN. Si el informe de lesiones no está completo, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
       _playerGroup(f.awayTeam, widget.awayTeam?.abbreviation ?? ''),
       _playerGroup(f.homeTeam, widget.homeTeam?.abbreviation ?? ''),
-    ]);
+    ]));
   }
+
+  Widget _predictionTab() => ListView(
+    padding: EdgeInsets.zero,
+    children: [_predictionContent()],
+  );
 
   Widget _headToHeadTab() => FutureBuilder<List<Map<String, dynamic>>>(
     future: _headToHead,
@@ -185,9 +190,10 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
         ])),
         if (widget.showHeadToHead)
           const TabBar(tabs: [Tab(text: 'Pronóstico'), Tab(text: 'Enfrentamientos')]),
-        SizedBox(height: 440, child: widget.showHeadToHead
-          ? TabBarView(children: [_predictionTab(), _headToHeadTab()])
-          : _predictionTab()),
+        if (widget.showHeadToHead)
+          SizedBox(height: 440, child: TabBarView(children: [_predictionTab(), _headToHeadTab()]))
+        else
+          _predictionContent(),
       ]),
     ),
   );
