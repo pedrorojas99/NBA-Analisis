@@ -4,6 +4,7 @@ import '../models/prediction.dart';
 import '../services/prediction_store.dart';
 import '../services/nba_prediction_service.dart';
 import '../services/nba_prediction_history_service.dart';
+import '../services/nba_player_prediction_service.dart';
 import 'player_stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final nbaService = NbaDataService();
   final predictionService = NbaPredictionService();
   final historyService = NbaPredictionHistoryService();
+  final playerPredictionService = NbaPlayerPredictionService();
   int tab = 0;
   List<NbaGame> nbaGames = [];
   bool nbaLoading = true;
@@ -29,6 +31,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool predictionLoading = true;
   String? predictionError;
   String predictionModelVersion = 'rolling-form-0.1';
+  List<NbaPlayerForecast> playerForecasts = [];
+  Map<String, dynamic> playerPredictionMeta = {};
+  bool playerPredictionLoading = true;
+  String? playerPredictionError;
   List<NbaStoredPrediction> cloudPredictions = [];
   bool cloudHistoryLoading = true;
   String? cloudHistoryError;
@@ -45,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool loading = true;
 
   @override
-  void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); }
+  void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }
 
   Future<void> refresh() async {
     final data = await store.load();
@@ -68,6 +74,22 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() { predictionError = e.toString(); predictionLoading = false; });
+    }
+  }
+
+  Future<void> refreshPlayerPredictions() async {
+    if (mounted) setState(() { playerPredictionLoading = true; playerPredictionError = null; });
+    try {
+      final data = await playerPredictionService.load();
+      if (!mounted) return;
+      setState(() {
+        playerForecasts = data.forecasts;
+        playerPredictionMeta = data.meta;
+        playerPredictionLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { playerPredictionError = e.toString(); playerPredictionLoading = false; });
     }
   }
 
@@ -143,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); }, icon: const Icon(Icons.refresh))],
+        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }, icon: const Icon(Icons.refresh))],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
       floatingActionButton: tab == 2 ? FloatingActionButton.extended(
@@ -206,6 +228,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ...nbaGames.map(_nbaGameCard),
       const SizedBox(height: 12),
       _predictionSection(),
+      const SizedBox(height: 8),
+      _playerPredictionSection(),
       const SizedBox(height: 8),
       _section('Estadísticas individuales recientes'),
       if (nbaPlayerStats.isEmpty && !nbaLoading)
@@ -316,6 +340,78 @@ class _HomeScreenState extends State<HomeScreen> {
           ]),
         ),
       )),
+    ]);
+  }
+
+  Widget _playerPredictionSection() {
+    final grouped = <String, List<NbaPlayerForecast>>{};
+    for (final forecast in playerForecasts) {
+      grouped.putIfAbsent(forecast.gameId, () => []).add(forecast);
+    }
+    final verifiedGames = playerPredictionMeta['games_with_verified_availability'] ?? 0;
+    final checkedGames = playerPredictionMeta['games_checked'] ?? 0;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section('Predicciones de los jugadores titulares'),
+      const Text(
+        'Solo aparecen jugadores con titularidad confirmada y sin lesión reportada por ESPN. Si falta la confirmación, NBA Analytics los omite.',
+        style: TextStyle(fontSize: 12),
+      ),
+      const SizedBox(height: 8),
+      if (playerPredictionLoading)
+        const Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator())),
+      if (playerPredictionError != null)
+        Card(child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text('No se pudieron cargar las predicciones individuales: $playerPredictionError'),
+        )),
+      if (!playerPredictionLoading && playerPredictionError == null && playerForecasts.isEmpty)
+        _empty('Todavía no hay jugadores elegibles. Esperamos a que ESPN confirme los quintetos titulares y publique el informe de lesiones completo; no hacemos predicciones por suposición.'),
+      if (!playerPredictionLoading && playerPredictionError == null && playerForecasts.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text('Partidos revisados: $checkedGames · Con disponibilidad verificada: $verifiedGames',
+            style: Theme.of(context).textTheme.bodySmall),
+        ),
+      ...grouped.entries.map((entry) {
+        final players = entry.value;
+        NbaForecast? gameForecast;
+        for (final item in nbaForecasts) {
+          if (item.gameId == entry.key) { gameForecast = item; break; }
+        }
+        final matchup = gameForecast == null
+            ? 'Jugadores del partido'
+            : '${gameForecast.awayTeam} vs ${gameForecast.homeTeam}';
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(matchup, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text(players.first.scheduledStart.toLocal().toString().substring(0, 16),
+                style: Theme.of(context).textTheme.bodySmall),
+              const Divider(),
+              ...players.map((p) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${p.teamAbbreviation} · ${p.position ?? 'Titular'} · muestra ${p.sampleGames} partidos',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  ])),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('${p.points.toStringAsFixed(1)} PTS',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    Text('${p.rebounds.toStringAsFixed(1)} REB · ${p.assists.toStringAsFixed(1)} AST',
+                      style: Theme.of(context).textTheme.bodySmall),
+                    Text('${p.threes.toStringAsFixed(1)} 3PT · ${p.minutes.toStringAsFixed(1)} MIN',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+                ]),
+              )),
+            ]),
+          ),
+        );
+      }),
     ]);
   }
 
