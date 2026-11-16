@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/../services/nba_data_service.dart';
+import '../services/nba_data_service.dart';
 import '../services/nba_prediction_service.dart';
 import '../services/nba_player_prediction_service.dart';
 import 'matchup_prediction_card.dart';
@@ -49,7 +49,8 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
       final playerData = await NbaPlayerPredictionService().load();
       if (!mounted) return;
       setState(() {
-        forecast = data.forecasts.where((f) => f.gameId == widget.game.id).firstOrNull;
+        final matchingForecasts = data.forecasts.where((f) => f.gameId == widget.game.id).toList();
+        forecast = matchingForecasts.isEmpty ? null : matchingForecasts.first;
         players = playerData.forecasts.where((p) => p.gameId == widget.game.id).toList();
       });
     } catch (e) {
