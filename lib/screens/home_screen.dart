@@ -5,7 +5,8 @@ import '../services/prediction_store.dart';
 import '../services/nba_prediction_service.dart';
 import '../services/nba_prediction_history_service.dart';
 import '../services/nba_player_prediction_service.dart';
-import 'player_stats_screen.dart';
+import 'search_hub_screen.dart';
+import 'matchup_prediction_card.dart';
 import '../services/app_update_service.dart';
 
 class _NbaAnalyticsLogo extends StatelessWidget {
@@ -13,54 +14,43 @@ class _NbaAnalyticsLogo extends StatelessWidget {
   const _NbaAnalyticsLogo({required this.size});
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: size, height: size,
-    child: Stack(children: [
-      CustomPaint(size: Size(size, size), painter: _BasketballLogoPainter()),
-      Positioned(right: 0, bottom: 0, child: Container(
-        width: size * .43, height: size * .43,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1769AA),
-          border: Border.all(color: const Color(0xFF10141D), width: 1.5),
-          borderRadius: BorderRadius.circular(size),
-        ),
-        alignment: Alignment.center,
-        child: Text('A', style: TextStyle(
-          color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * .25,
-        )),
-      )),
-    ]),
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size(size, size),
+    painter: _BasketballLogoPainter(),
   );
 }
 
 class _BasketballLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width * .45;
-    final ball = Paint()..color = const Color(0xFFEF6C35);
-    final lines = Paint()
-      ..color = const Color(0xFF20202A)
+    final sx = size.width / 100;
+    final sy = size.height / 100;
+    final a = Path()
+      ..moveTo(50 * sx, 4 * sy)
+      ..lineTo(5 * sx, 96 * sy)
+      ..lineTo(29 * sx, 96 * sy)
+      ..lineTo(39 * sx, 74 * sy)
+      ..lineTo(61 * sx, 74 * sy)
+      ..lineTo(71 * sx, 96 * sy)
+      ..lineTo(95 * sx, 96 * sy)
+      ..close();
+    final paint = Paint()..color = const Color(0xFFEF6C35);
+    canvas.drawPath(a, paint);
+    final seam = Paint()
+      ..color = const Color(0xFF252B33)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * .055;
-    canvas.drawCircle(center, radius, ball);
-    canvas.drawCircle(center, radius, lines);
-    canvas.drawLine(Offset(center.dx - radius, center.dy),
-        Offset(center.dx + radius, center.dy), lines);
-    canvas.drawLine(Offset(center.dx, center.dy - radius),
-        Offset(center.dx, center.dy + radius), lines);
-    final leftArc = Path()
-      ..moveTo(center.dx - radius * .25, center.dy - radius * .97)
-      ..cubicTo(center.dx - radius * .85, center.dy - radius * .35,
-          center.dx - radius * .85, center.dy + radius * .35,
-          center.dx - radius * .25, center.dy + radius * .97);
-    final rightArc = Path()
-      ..moveTo(center.dx + radius * .25, center.dy - radius * .97)
-      ..cubicTo(center.dx + radius * .85, center.dy - radius * .35,
-          center.dx + radius * .85, center.dy + radius * .35,
-          center.dx + radius * .25, center.dy + radius * .97);
-    canvas.drawPath(leftArc, lines);
-    canvas.drawPath(rightArc, lines);
+      ..strokeWidth = 4.2 * sx
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(34 * sx, 63 * sy), Offset(66 * sx, 63 * sy), seam);
+    final left = Path()
+      ..moveTo(49 * sx, 7 * sy)
+      ..cubicTo(35 * sx, 31 * sy, 25 * sx, 56 * sy, 14 * sx, 83 * sy);
+    final right = Path()
+      ..moveTo(51 * sx, 7 * sy)
+      ..cubicTo(65 * sx, 31 * sy, 75 * sx, 56 * sy, 86 * sx, 83 * sy);
+    canvas.drawPath(left, seam);
+    canvas.drawPath(right, seam);
+    canvas.drawLine(Offset(40 * sx, 72 * sy), Offset(60 * sx, 72 * sy), seam);
   }
 
   @override
@@ -258,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _liveNbaPage(), const PlayerStatsScreen(), _gamesPage(), _historyPage(), _learningPage(),
+      _liveNbaPage(), const SearchHubScreen(), _gamesPage(), _historyPage(), _learningPage(),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -419,7 +409,6 @@ class _HomeScreenState extends State<HomeScreen> {
       const SizedBox(height: 12),
       _predictionSection(),
       const SizedBox(height: 8),
-      _playerPredictionSection(),
       const SizedBox(height: 8),
       _section('Estadísticas individuales recientes'),
       if (nbaPlayerStats.isEmpty && !nbaLoading)
@@ -451,9 +440,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final slateDate = (predictionMeta['slate_date'] ?? '—').toString();
     final slateGames = predictionMeta['slate_games'] ?? 0;
     final slateMessage = slateStatus == 'in_progress'
-        ? 'Jornada $slateDate en curso: hay partidos sin terminar. La APK espera a que cierre toda la jornada antes de preparar la siguiente.'
+        ? 'Jornada $slateDate en curso: esperamos a que termine antes de preparar la siguiente.'
         : slateStatus == 'ready'
-            ? 'Próxima jornada: $slateDate · $slateGames partidos. Solo se pronostica esta fecha.'
+            ? 'Próxima jornada: $slateDate · $slateGames partidos.'
             : 'No hay una próxima jornada disponible en el calendario sincronizado.';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _section('Predicciones de la próxima jornada'),
@@ -461,24 +450,24 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(12),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(slateStatus == 'in_progress' ? Icons.hourglass_top : Icons.calendar_today,
-            color: slateStatus == 'in_progress' ? Colors.orangeAccent : Colors.lightBlueAccent),
+            color: const Color(0xFF1769AA)),
           const SizedBox(width: 10),
           Expanded(child: Text(slateMessage)),
         ]),
       )),
       Card(
-        color: const Color(0xFF202B3B),
+        color: const Color(0xFFEAF2FA),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const Icon(Icons.auto_graph, color: Colors.lightBlueAccent),
+              const Icon(Icons.auto_graph, color: Color(0xFF1769AA)),
               const SizedBox(width: 8),
-              const Expanded(child: Text('MODELO EXPERIMENTAL', style: TextStyle(fontWeight: FontWeight.bold))),
-              Text(predictionModelVersion, style: const TextStyle(fontSize: 11)),
+              const Expanded(child: Text('MODELO EXPERIMENTAL', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF174A7E)))),
+              Text(predictionModelVersion, style: const TextStyle(fontSize: 11, color: Color(0xFF526477))),
             ]),
             const SizedBox(height: 7),
-            const Text('Usa los últimos 10 partidos finalizados de cada equipo. Requiere al menos 5 por equipo. La probabilidad todavía no está calibrada.'),
+            const Text('Analiza los últimos 10 partidos finalizados de cada equipo. La probabilidad todavía está en evaluación y no debe interpretarse como garantía.'),
             const SizedBox(height: 5),
             Text('Resultados históricos disponibles: $total', style: const TextStyle(fontSize: 11)),
           ]),
@@ -497,111 +486,26 @@ class _HomeScreenState extends State<HomeScreen> {
         _empty(slateStatus == 'in_progress'
           ? 'No se generan pronósticos nuevos mientras la jornada actual siga abierta.'
           : 'No hay partidos elegibles con suficiente historial para esta próxima jornada.'),
-      ...nbaForecasts.map((forecast) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(forecast.scheduledStart.toLocal().toString().substring(0, 16),
-              style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Text('${forecast.awayTeam} vs ${forecast.homeTeam}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 8),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(forecast.awayTeam, style: const TextStyle(fontSize: 12)),
-              Text(forecast.awayTeam == forecast.predictedWinner ? 'GANADOR PROBABLE' : ''),
-            ]),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(forecast.predictedAwayScore.toStringAsFixed(0),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-              Text(forecast.predictedHomeScore.toStringAsFixed(0),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-              Text(forecast.homeTeam, style: const TextStyle(fontSize: 12)),
-            ]),
-            const Divider(),
-            Text('Ganador estimado: ${forecast.predictedWinner}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('Probabilidad local: ${forecast.homeWinProbability.toStringAsFixed(1)}% · visitante: ${forecast.awayWinProbability.toStringAsFixed(1)}%'),
-            Text('Últimos partidos: visitante ${forecast.awayRecentRecord} · local ${forecast.homeRecentRecord}',
-              style: Theme.of(context).textTheme.bodySmall),
-            Text('Muestra: ${forecast.awaySample} / ${forecast.homeSample} partidos',
-              style: Theme.of(context).textTheme.bodySmall),
-          ]),
-        ),
-      )),
-    ]);
-  }
-
-  Widget _playerPredictionSection() {
-    final grouped = <String, List<NbaPlayerForecast>>{};
-    for (final forecast in playerForecasts) {
-      grouped.putIfAbsent(forecast.gameId, () => []).add(forecast);
-    }
-    final verifiedGames = playerPredictionMeta['games_with_verified_availability'] ?? 0;
-    final checkedGames = playerPredictionMeta['games_checked'] ?? 0;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _section('Predicciones de los jugadores titulares'),
-      const Text(
-        'Solo aparecen jugadores con titularidad confirmada y sin lesión reportada por ESPN. Si falta la confirmación, NBA Analytics los omite.',
-        style: TextStyle(fontSize: 12),
-      ),
-      const SizedBox(height: 8),
-      if (playerPredictionLoading)
-        const Padding(padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator())),
-      if (playerPredictionError != null)
-        Card(child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text('No se pudieron cargar las predicciones individuales: $playerPredictionError'),
-        )),
-      if (!playerPredictionLoading && playerPredictionError == null && playerForecasts.isEmpty)
-        _empty('Todavía no hay jugadores elegibles. Esperamos a que ESPN confirme los quintetos titulares y publique el informe de lesiones completo; no hacemos predicciones por suposición.'),
-      if (!playerPredictionLoading && playerPredictionError == null && playerForecasts.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text('Partidos revisados: $checkedGames · Con disponibilidad verificada: $verifiedGames',
-            style: Theme.of(context).textTheme.bodySmall),
-        ),
-      ...grouped.entries.map((entry) {
-        final players = entry.value;
-        NbaForecast? gameForecast;
-        for (final item in nbaForecasts) {
-          if (item.gameId == entry.key) { gameForecast = item; break; }
+      ...nbaForecasts.map((forecast) {
+        NbaGame? game;
+        for (final item in nbaGames) {
+          if (item.id == forecast.gameId) { game = item; break; }
         }
-        final matchup = gameForecast == null
-            ? 'Jugadores del partido'
-            : '${gameForecast.awayTeam} vs ${gameForecast.homeTeam}';
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(matchup, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              Text(players.first.scheduledStart.toLocal().toString().substring(0, 16),
-                style: Theme.of(context).textTheme.bodySmall),
-              const Divider(),
-              ...players.map((p) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: Row(children: [
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('${p.teamAbbreviation} · ${p.position ?? 'Titular'} · muestra ${p.sampleGames} partidos',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  ])),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text('${p.points.toStringAsFixed(1)} PTS',
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                    Text('${p.rebounds.toStringAsFixed(1)} REB · ${p.assists.toStringAsFixed(1)} AST',
-                      style: Theme.of(context).textTheme.bodySmall),
-                    Text('${p.threes.toStringAsFixed(1)} 3PT · ${p.minutes.toStringAsFixed(1)} MIN',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  ]),
-                ]),
-              )),
-            ]),
-          ),
+        final players = playerForecasts.where((p) => p.gameId == forecast.gameId).toList();
+        return MatchupPredictionCard(
+          key: ValueKey(forecast.gameId),
+          forecast: forecast,
+          homeTeam: game?.homeTeam,
+          awayTeam: game?.awayTeam,
+          players: players,
         );
       }),
+      if (playerPredictionLoading)
+        const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())),
+      if (playerPredictionError != null)
+        Padding(padding: const EdgeInsets.only(top: 6), child: Text('Datos individuales: $playerPredictionError', style: const TextStyle(fontSize: 11))),
+      if (!playerPredictionLoading && playerForecasts.isEmpty)
+        const Padding(padding: EdgeInsets.only(top: 6), child: Text('Los pronósticos individuales aparecen cuando ESPN confirma titulares y disponibilidad.', style: TextStyle(fontSize: 11))),
     ]);
   }
 
