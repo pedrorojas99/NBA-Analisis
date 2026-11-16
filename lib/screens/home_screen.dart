@@ -6,6 +6,7 @@ import '../services/nba_prediction_service.dart';
 import '../services/nba_prediction_history_service.dart';
 import '../services/nba_player_prediction_service.dart';
 import 'player_stats_screen.dart';
+import '../services/app_update_service.dart';
 
 class _NbaAnalyticsLogo extends StatelessWidget {
   final double size;
@@ -78,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final predictionService = NbaPredictionService();
   final historyService = NbaPredictionHistoryService();
   final playerPredictionService = NbaPlayerPredictionService();
+  final appUpdateService = AppUpdateService();
   int tab = 0;
   List<NbaGame> nbaGames = [];
   bool nbaLoading = true;
@@ -111,6 +113,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }
+
+  Future<void> _checkForAppUpdate() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Buscando actualizaciones…')),
+    );
+    try {
+      final update = await appUpdateService.checkForUpdate();
+      if (!mounted) return;
+      if (update == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ya tienes la última versión de NBA Analytics.')),
+        );
+        return;
+      }
+      final install = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Nueva versión disponible'),
+          content: Text('Hay una actualización (build ${update.buildNumber}). ¿Quieres descargarla e instalarla ahora?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Después')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Actualizar')),
+          ],
+        ),
+      );
+      if (install != true || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Descargando APK… Android te pedirá confirmar la instalación.')),
+      );
+      await appUpdateService.downloadAndInstall(update);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar: $error')),
+      );
+    }
+  }
 
   Future<void> refresh() async {
     final data = await store.load();
@@ -228,7 +267,29 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 10),
           const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
         ]),
-        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }, icon: const Icon(Icons.refresh))],
+        actions: [
+          IconButton(
+            onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); },
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Actualizar datos',
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Menú',
+            onSelected: (value) {
+              if (value == 'app_update') _checkForAppUpdate();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'app_update',
+                child: Row(children: [
+                  Icon(Icons.system_update_alt),
+                  SizedBox(width: 10),
+                  Text('Actualizar APK'),
+                ]),
+              ),
+            ],
+          ),
+        ],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
       floatingActionButton: null,
