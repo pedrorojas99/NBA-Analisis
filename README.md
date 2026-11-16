@@ -9,7 +9,7 @@ Aplicación Flutter para Android que combina datos NBA recopilados desde ESPN, e
 - Recopilación periódica de boxscores y estadísticas de jugadores/equipos.
 - Pantalla de jugadores con búsqueda, temporadas disponibles, promedios calculados sobre los partidos recopilados y detalle de partidos recientes.
 - Pantalla NBA con calendario, marcadores recientes y estadísticas individuales disponibles.
-- Motor experimental de pronósticos de partidos: utiliza los últimos 10 partidos finalizados de cada equipo, exige al menos 5 partidos por equipo, estima puntos anotados/permitidos y ajusta la localía.
+- Motor experimental de pronósticos por jornada: identifica la próxima fecha NBA usando el calendario de Estados Unidos (Eastern Time), espera a que todos los partidos de la jornada actual terminen y genera pronósticos solo para la siguiente fecha. Utiliza los últimos 10 partidos finalizados de cada equipo, exige al menos 5 partidos por equipo, estima puntos anotados/permitidos y ajusta la localía.
 - Probabilidades de victoria calculadas mediante una transformación logística no calibrada; deben interpretarse como estimaciones experimentales, no como probabilidades garantizadas.
 - Registro local de pronósticos manuales, conservando el pronóstico original al añadir el resultado real.
 - Métricas descriptivas de acierto del ganador y error medio de puntos, separadas por versión registrada.
