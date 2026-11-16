@@ -69,9 +69,17 @@ class AppUpdateService {
   }) async {
     final uri = Uri.parse(update.apkUrl);
     final request = http.Request('GET', uri);
-    final response = await http.Client().send(request)
-        .timeout(const Duration(seconds: 30));
+    final client = http.Client();
+    late final http.StreamedResponse response;
+    try {
+      response = await client.send(request)
+          .timeout(const Duration(seconds: 30));
+    } catch (_) {
+      client.close();
+      rethrow;
+    }
     if (response.statusCode != 200) {
+      client.close();
       throw Exception('No se pudo descargar la APK (HTTP ${response.statusCode}).');
     }
 
@@ -89,6 +97,7 @@ class AppUpdateService {
       await sink.flush();
     } finally {
       await sink.close();
+      client.close();
     }
 
     if (!await file.exists() || await file.length() < 1000000) {
