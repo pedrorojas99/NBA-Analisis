@@ -525,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: Theme.of(context).textTheme.bodySmall),
             Text(statusLabel, style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: isLive ? Colors.greenAccent : (isFinal ? Colors.blueAccent : Colors.orangeAccent),
+              color: isLive ? const Color(0xFF16845B) : (isFinal ? const Color(0xFF1769AA) : const Color(0xFFCC762E)),
             )),
           ]),
           const SizedBox(height: 12),
@@ -543,6 +543,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _teamScoreRow(String abbreviation, String name, int? score) => Row(
     children: [
+      Image.network(
+        'https://a.espncdn.com/i/teamlogos/nba/500/${abbreviation.toLowerCase()}.png',
+        width: 34, height: 34, fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(Icons.sports_basketball, size: 28, color: Color(0xFFEF6C35)),
+      ),
+      const SizedBox(width: 10),
       SizedBox(width: 48, child: Text(abbreviation, style: const TextStyle(fontWeight: FontWeight.w900))),
       Expanded(child: Text(name)),
       Text(score?.toString() ?? '—', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
