@@ -29,6 +29,7 @@ class NbaAnalyticsApp extends StatelessWidget {
           surface: Colors.white,
         ),
         scaffoldBackgroundColor: const Color(0xFFF7F9FC),
+        iconTheme: const IconThemeData(size: 20),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: Color(0xFF17324D),
