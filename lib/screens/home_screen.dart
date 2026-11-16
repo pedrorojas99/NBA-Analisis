@@ -451,8 +451,6 @@ class _HomeScreenState extends State<HomeScreen> {
       Card(child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Fuente de datos: ESPN', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 5),
           Text(nbaUpdatedAt == null
               ? 'Conectando con NBA Analytics…'
               : 'Actualizado: ' + nbaUpdatedAt!.toLocal().toString().substring(0, 16)),
@@ -465,8 +463,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Cobertura de datos · ventana mostrada', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
             Text('Partidos: ${nbaMeta['games'] ?? 0} · Equipos: ${nbaMeta['teams'] ?? 0}'),
             Text('Registros individuales: ${nbaMeta['player_stat_rows'] ?? 0}'),
             Text('Registros por equipo: ${nbaMeta['team_stat_rows'] ?? 0}'),
