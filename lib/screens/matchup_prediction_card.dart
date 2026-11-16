@@ -96,7 +96,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('${p.position ?? 'Titular'} · ${p.sampleGames} partidos de muestra', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+                Text('${p.position ?? 'Titular'} · ${p.sampleGames} partidos · ${p.injuryClear ? 'disponibilidad verificada' : 'lesiones sin confirmar'}', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
               ])),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text('${p.points.toStringAsFixed(1)} PTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF174A7E))),
@@ -132,7 +132,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       Text('Ganador estimado: ${f.predictedWinner}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
       const Divider(height: 20),
       const Text('Pronósticos individuales', style: TextStyle(fontWeight: FontWeight.w900)),
-      const Text('Solo se muestran jugadores con titularidad confirmada y disponibilidad verificada. Se ordenan por impacto estimado (puntos, rebotes y asistencias).', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
+      const Text('Se muestran titulares activos confirmados por ESPN. Si el informe de lesiones no está completo, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
       _playerGroup(f.awayTeam, widget.awayTeam?.abbreviation ?? ''),
       _playerGroup(f.homeTeam, widget.homeTeam?.abbreviation ?? ''),
     ]);
