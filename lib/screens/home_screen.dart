@@ -3,6 +3,7 @@ import '../services/nba_data_service.dart';
 import '../models/prediction.dart';
 import '../services/prediction_store.dart';
 import '../services/nba_prediction_service.dart';
+import '../services/nba_prediction_history_service.dart';
 import 'player_stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final store = PredictionStore();
   final nbaService = NbaDataService();
   final predictionService = NbaPredictionService();
+  final historyService = NbaPredictionHistoryService();
   int tab = 0;
   List<NbaGame> nbaGames = [];
   bool nbaLoading = true;
@@ -27,6 +29,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool predictionLoading = true;
   String? predictionError;
   String predictionModelVersion = 'rolling-form-0.1';
+  List<NbaStoredPrediction> cloudPredictions = [];
+  bool cloudHistoryLoading = true;
+  String? cloudHistoryError;
+  int cloudEvaluatedCount = 0;
+  int cloudPendingCount = 0;
   List<Prediction> predictions = [];
   bool loading = true;
 
@@ -50,9 +57,27 @@ class _HomeScreenState extends State<HomeScreen> {
         predictionModelVersion = data.modelVersion;
         predictionLoading = false;
       });
+      await refreshCloudHistory();
     } catch (e) {
       if (!mounted) return;
       setState(() { predictionError = e.toString(); predictionLoading = false; });
+    }
+  }
+
+  Future<void> refreshCloudHistory() async {
+    if (mounted) setState(() { cloudHistoryLoading = true; cloudHistoryError = null; });
+    try {
+      final data = await historyService.load();
+      if (!mounted) return;
+      setState(() {
+        cloudPredictions = data.forecasts;
+        cloudEvaluatedCount = data.evaluatedCount;
+        cloudPendingCount = data.pendingCount;
+        cloudHistoryLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { cloudHistoryError = e.toString(); cloudHistoryLoading = false; });
     }
   }
 
@@ -312,13 +337,60 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
-  Widget _historyPage() => ListView(padding: const EdgeInsets.all(16), children: [
-    _section('Historial verificable'),
-    const Text('Cada pronóstico conserva sus valores originales. Al añadir el marcador real solo se completa el resultado; no se reescribe el pronóstico.'),
-    const SizedBox(height: 12),
-    if (predictions.where((p) => p.isSettled).isEmpty) _empty('Aún no hay partidos con resultados reales registrados.'),
-    ...predictions.where((p) => p.isSettled).map((p) => _predictionCard(p)),
-  ]);
+  Widget _historyPage() => RefreshIndicator(
+    onRefresh: refreshCloudHistory,
+    child: ListView(padding: const EdgeInsets.all(16), children: [
+      _section('Historial automático en la nube'),
+      const Text('Los pronósticos guardados por el motor se conservan con su versión y datos de entrada. Cuando llega el resultado final, se calcula su error sin modificar el pronóstico original.'),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: _metric('Guardados', '${cloudPredictions.length}')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Evaluados', '$cloudEvaluatedCount')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Pendientes', '$cloudPendingCount')),
+      ]),
+      if (cloudHistoryLoading) const Padding(
+        padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator()),
+      ),
+      if (cloudHistoryError != null) _empty('No se pudo cargar el historial: $cloudHistoryError'),
+      if (!cloudHistoryLoading && cloudHistoryError == null && cloudPredictions.isEmpty)
+        _empty('Todavía no hay pronósticos guardados en la nube.'),
+      ...cloudPredictions.map(_cloudPredictionCard),
+      const Divider(height: 28),
+      _section('Historial manual del teléfono'),
+      const Text('Estos son los pronósticos que registraste manualmente en este dispositivo.'),
+      if (predictions.where((p) => p.isSettled).isEmpty) _empty('Aún no hay pronósticos manuales con resultados reales.'),
+      ...predictions.where((p) => p.isSettled).map((p) => _predictionCard(p)),
+    ]),
+  );
+
+  Widget _cloudPredictionCard(NbaStoredPrediction p) => Card(
+    margin: const EdgeInsets.only(bottom: 10),
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(p.scheduledStart == null ? 'Fecha no disponible' : p.scheduledStart!.toLocal().toString().substring(0, 16),
+          style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 6),
+        Text('${p.awayTeam} vs ${p.homeTeam}',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 6),
+        Text('Pronóstico: ${p.predictedAwayScore.toStringAsFixed(0)} - ${p.predictedHomeScore.toStringAsFixed(0)}'),
+        Text('Ganador estimado: ${p.predictedWinner} · Probabilidad local: ${p.homeWinProbability.toStringAsFixed(1)}%'),
+        Text('Modelo: ${p.modelVersion}', style: Theme.of(context).textTheme.bodySmall),
+        const Divider(),
+        if (p.isEvaluated) ...[
+          Text('Resultado real: ${p.actual!['away_score']} - ${p.actual!['home_score']}',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text('Acierto del ganador: ${p.errorMetrics!['winner_correct'] == true ? 'Sí' : 'No'}'),
+          Text('Error de puntos: local ${p.errorMetrics!['home_score_abs_error']} · visitante ${p.errorMetrics!['away_score_abs_error']}'),
+          Text('Brier score: ${p.errorMetrics!['brier_score']}'),
+        ] else
+          const Text('Pendiente de resultado final', style: TextStyle(color: Colors.orangeAccent)),
+      ]),
+    ),
+  );
 
   Widget _learningPage() {
     final done = predictions.where((p) => p.isSettled).toList();
@@ -360,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('BASE FUNCIONAL · MODO LOCAL', style: TextStyle(fontWeight: FontWeight.bold)),
         SizedBox(height: 6),
-        Text('Esta versión guarda pronósticos y resultados en el teléfono. Todavía no descarga partidos NBA ni genera predicciones automáticas.'),
+        Text('La app ya consulta partidos y estadísticas NBA, genera pronósticos automáticos experimentales y guarda sus snapshots en la nube. Los pronósticos manuales siguen guardándose en este teléfono.'),
       ],
     )),
   );
