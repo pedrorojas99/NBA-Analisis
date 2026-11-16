@@ -18,6 +18,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
   List<NbaPlayerForecast> players = [];
   Map<String, dynamic>? awayStats;
   Map<String, dynamic>? homeStats;
+  Map<String, dynamic>? actualGameStats;
   bool loading = true;
   String? predictionError;
   String? statsError;
@@ -42,6 +43,67 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     return data['summary'] is Map ? Map<String, dynamic>.from(data['summary']) : null;
   }
 
+  Future<Map<String, dynamic>> _loadActualGameStats(String gameId) async {
+    final response = await Supabase.instance.client.functions.invoke(
+      'nba-public-data',
+      body: {'action': 'game_stats', 'game_id': gameId},
+    );
+    if (response.status < 200 || response.status >= 300 || response.data is! Map) {
+      throw Exception('HTTP ${response.status}');
+    }
+    final data = Map<String, dynamic>.from(response.data as Map);
+    if (data['ok'] != true) throw Exception((data['error'] ?? 'Estadísticas reales no disponibles').toString());
+    return data;
+  }
+
+  Map<String, dynamic> _flatStats(dynamic value) {
+    if (value is! Map) return <String, dynamic>{};
+    final result = <String, dynamic>{};
+    for (final category in (value['categories'] as List? ?? [])) {
+      if (category is Map && category['values'] is Map) result.addAll(Map<String, dynamic>.from(category['values'] as Map));
+    }
+    if (value['values'] is Map) result.addAll(Map<String, dynamic>.from(value['values'] as Map));
+    result.addAll(Map<String, dynamic>.from(value));
+    return result;
+  }
+
+  Widget _actualStatsSection(NbaGame game) {
+    final data = actualGameStats;
+    final players = (data?['player_stats'] as List? ?? []).whereType<Map>().toList()
+      ..sort((a, b) {
+        final ap = num.tryParse('${_flatStats(a['stats'])['PTS'] ?? 0}') ?? 0;
+        final bp = num.tryParse('${_flatStats(b['stats'])['PTS'] ?? 0}') ?? 0;
+        return bp.compareTo(ap);
+      });
+    final teamStats = (data?['team_stats'] as List? ?? []).whereType<Map>().toList();
+    String stat(dynamic row, String key) => '${_flatStats((row as Map)['stats'])[key] ?? '—'}';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text('RESULTADO Y ESTADÍSTICAS REALES',
+        style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF174A7E)))),
+      Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
+        Text('${game.awayTeam?.name ?? 'Visitante'}  ${game.awayScore ?? '—'} - ${game.homeScore ?? '—'}  ${game.homeTeam?.name ?? 'Local'}',
+          textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+        const SizedBox(height: 8),
+        if (teamStats.isEmpty) const Text('No hay estadísticas de equipo guardadas para este partido.'),
+        ...teamStats.map((row) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text((row['team_name'] ?? 'Equipo').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('PTS ${stat(row, 'PTS')} · REB ${stat(row, 'REB')} · AST ${stat(row, 'AST')} · 3PT ${stat(row, '3PT')}',
+              style: const TextStyle(fontSize: 12)),
+          ],
+        ))),
+      ]))),
+      const Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text('JUGADORES · ESTADÍSTICAS DEL PARTIDO',
+        style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF174A7E)))),
+      if (players.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(12), child: Text('No hay estadísticas individuales verificadas guardadas para este partido.'))),
+      ...players.map((row) => Card(margin: const EdgeInsets.only(bottom: 6), child: ListTile(
+        dense: true, title: Text((row['player_name'] ?? 'Jugador').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text('${row['team_abbreviation'] ?? ''} · ${stat(row, 'REB')} REB · ${stat(row, 'AST')} AST · ${stat(row, '3PT')} 3PT'),
+        trailing: Text('${stat(row, 'PTS')} PTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+      ))),
+    ]);
+  }
+
   Future<void> _load() async {
     if (mounted) setState(() { loading = true; predictionError = null; statsError = null; });
     try {
@@ -59,6 +121,14 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
       }
     } catch (_) {
       // Keep the game forecast and team metrics visible if player data is unavailable.
+    }
+    if (widget.game.status == 'final') {
+      try {
+        final actual = await _loadActualGameStats(widget.game.id);
+        if (mounted) setState(() => actualGameStats = actual);
+      } catch (e) {
+        if (mounted) setState(() => statsError = e.toString());
+      }
     }
     try {
       final values = await Future.wait([
@@ -128,7 +198,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
-                  const Text('ANÁLISIS PREVIO AL PARTIDO',
+                  Text(game.status == 'final' ? 'PARTIDO FINALIZADO · ESTADÍSTICAS REALES' : 'ANÁLISIS PREVIO AL PARTIDO',
                     style: TextStyle(fontSize: 10, letterSpacing: 1, color: Color(0xFF667788))),
                 ]),
               ),
@@ -162,7 +232,8 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
                 padding: const EdgeInsets.all(12),
                 child: Text('No se pudieron cargar las estadísticas de equipo: $statsError'),
               )),
-            if (!loading) ...[
+            if (!loading && game.status == 'final') _actualStatsSection(game),
+            if (!loading && game.status != 'final') ...[
               _teamStats(game.awayTeam?.name ?? 'Visitante', game.awayTeam?.abbreviation, awayStats),
               _teamStats(game.homeTeam?.name ?? 'Local', game.homeTeam?.abbreviation, homeStats),
             ],
