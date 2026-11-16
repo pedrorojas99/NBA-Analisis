@@ -46,15 +46,19 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     if (mounted) setState(() { loading = true; predictionError = null; statsError = null; });
     try {
       final data = await NbaPredictionService().load();
-      final playerData = await NbaPlayerPredictionService().load();
       if (!mounted) return;
-      setState(() {
-        final matchingForecasts = data.forecasts.where((f) => f.gameId == widget.game.id).toList();
-        forecast = matchingForecasts.isEmpty ? null : matchingForecasts.first;
-        players = playerData.forecasts.where((p) => p.gameId == widget.game.id).toList();
-      });
+      final matchingForecasts = data.forecasts.where((f) => f.gameId == widget.game.id).toList();
+      setState(() => forecast = matchingForecasts.isEmpty ? null : matchingForecasts.first);
     } catch (e) {
       if (mounted) setState(() => predictionError = e.toString());
+    }
+    try {
+      final playerData = await NbaPlayerPredictionService().load();
+      if (mounted) {
+        setState(() => players = playerData.forecasts.where((p) => p.gameId == widget.game.id).toList());
+      }
+    } catch (_) {
+      // Keep the game forecast and team metrics visible if player data is unavailable.
     }
     try {
       final values = await Future.wait([
