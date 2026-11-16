@@ -7,6 +7,7 @@ import '../services/nba_prediction_history_service.dart';
 import '../services/nba_player_prediction_service.dart';
 import 'search_hub_screen.dart';
 import 'matchup_prediction_card.dart';
+import 'game_analysis_screen.dart';
 import '../services/app_update_service.dart';
 
 class _NbaAnalyticsLogo extends StatelessWidget {
@@ -257,14 +258,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Row(mainAxisSize: MainAxisSize.min, children: [
-          const _NbaAnalyticsLogo(size: 34),
+          const _NbaAnalyticsLogo(size: 27),
           const SizedBox(width: 10),
           const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
         ]),
         actions: [
           IconButton(
             onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); },
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             tooltip: 'Actualizar datos',
           ),
           PopupMenuButton<String>(
@@ -411,8 +412,6 @@ class _HomeScreenState extends State<HomeScreen> {
       else
         ..._nextSlateGames.map(_nbaGameCard),
       const SizedBox(height: 12),
-      _predictionSection(),
-      const SizedBox(height: 8),
       const SizedBox(height: 8),
       _section('Estadísticas individuales recientes'),
       if (nbaPlayerStats.isEmpty && !nbaLoading)
@@ -513,35 +512,58 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
   }
 
+  void _openGameAnalysis(NbaGame game) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GameAnalysisScreen(game: game),
+    ));
+  }
+
   Widget _nbaGameCard(NbaGame game) {
     final away = game.awayTeam;
     final home = game.homeTeam;
     final isFinal = game.status == 'final';
     final isLive = game.status == 'in_progress';
-    final statusLabel = isFinal ? 'FINAL' : (isLive ? 'EN JUEGO' : 'PROGRAMADO');
+    final isPending = !isFinal && !isLive;
+    final statusLabel = isFinal ? 'FINAL' : (isLive ? 'EN JUEGO' : 'PENDIENTE');
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(padding: const EdgeInsets.all(14), child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Hora · ' + game.scheduledStart.toLocal().toString().substring(11, 16),
-                style: Theme.of(context).textTheme.bodySmall),
-            Text(statusLabel, style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isLive ? const Color(0xFF16845B) : (isFinal ? const Color(0xFF1769AA) : const Color(0xFFCC762E)),
-            )),
-          ]),
-          const SizedBox(height: 12),
-          _teamScoreRow(away?.abbreviation ?? 'VIS', away?.name ?? 'Visitante', game.awayScore),
-          const SizedBox(height: 8),
-          _teamScoreRow(home?.abbreviation ?? 'LOC', home?.name ?? 'Local', game.homeScore),
-          if (game.statusDetail != null && game.statusDetail!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(game.statusDetail!, style: Theme.of(context).textTheme.bodySmall),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: isPending ? () => _openGameAnalysis(game) : null,
+        child: Padding(padding: const EdgeInsets.all(12), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('Hora · ' + game.scheduledStart.toLocal().toString().substring(11, 16),
+                  style: Theme.of(context).textTheme.bodySmall),
+              if (isPending)
+                TextButton.icon(
+                  onPressed: () => _openGameAnalysis(game),
+                  icon: const Icon(Icons.analytics_outlined, size: 16),
+                  label: const Text('PENDIENTE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                )
+              else
+                Text(statusLabel, style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 11,
+                  color: isLive ? const Color(0xFF16845B) : const Color(0xFF1769AA),
+                )),
+            ]),
+            const SizedBox(height: 10),
+            _teamScoreRow(away?.abbreviation ?? 'VIS', away?.name ?? 'Visitante', game.awayScore),
+            const SizedBox(height: 6),
+            _teamScoreRow(home?.abbreviation ?? 'LOC', home?.name ?? 'Local', game.homeScore),
+            if (game.statusDetail != null && game.statusDetail!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(game.statusDetail!, style: Theme.of(context).textTheme.bodySmall),
+            ],
           ],
-        ],
-      )),
+        )),
+      ),
     );
   }
 
@@ -549,8 +571,8 @@ class _HomeScreenState extends State<HomeScreen> {
     children: [
       Image.network(
         'https://a.espncdn.com/i/teamlogos/nba/500/${({'GSW': 'gs', 'NY': 'ny', 'NO': 'no', 'SA': 'sa', 'UTAH': 'utah'}[abbreviation.toUpperCase()] ?? abbreviation.toLowerCase())}.png',
-        width: 34, height: 34, fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(Icons.sports_basketball, size: 28, color: Color(0xFFEF6C35)),
+        width: 28, height: 28, fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(Icons.sports_basketball, size: 22, color: Color(0xFFEF6C35)),
       ),
       const SizedBox(width: 10),
       SizedBox(width: 48, child: Text(abbreviation, style: const TextStyle(fontWeight: FontWeight.w900))),
