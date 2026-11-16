@@ -219,8 +219,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _predictionSection() {
     final total = predictionMeta['historical_final_games'] ?? 0;
+    final slateStatus = (predictionMeta['slate_status'] ?? 'unknown').toString();
+    final slateDate = (predictionMeta['slate_date'] ?? '—').toString();
+    final slateGames = predictionMeta['slate_games'] ?? 0;
+    final slateMessage = slateStatus == 'in_progress'
+        ? 'Jornada $slateDate en curso: hay partidos sin terminar. La APK espera a que cierre toda la jornada antes de preparar la siguiente.'
+        : slateStatus == 'ready'
+            ? 'Próxima jornada: $slateDate · $slateGames partidos. Solo se pronostica esta fecha.'
+            : 'No hay una próxima jornada disponible en el calendario sincronizado.';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _section('Predicciones automáticas'),
+      _section('Predicciones de la próxima jornada'),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(slateStatus == 'in_progress' ? Icons.hourglass_top : Icons.calendar_today,
+            color: slateStatus == 'in_progress' ? Colors.orangeAccent : Colors.lightBlueAccent),
+          const SizedBox(width: 10),
+          Expanded(child: Text(slateMessage)),
+        ]),
+      )),
       Card(
         color: const Color(0xFF202B3B),
         child: Padding(
@@ -249,7 +266,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       if (!predictionLoading && predictionError == null && nbaForecasts.isEmpty)
-        _empty('No hay partidos futuros con suficiente historial para generar un pronóstico.'),
+        _empty(slateStatus == 'in_progress'
+          ? 'No se generan pronósticos nuevos mientras la jornada actual siga abierta.'
+          : 'No hay partidos elegibles con suficiente historial para esta próxima jornada.'),
       ...nbaForecasts.map((forecast) => Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: Padding(
