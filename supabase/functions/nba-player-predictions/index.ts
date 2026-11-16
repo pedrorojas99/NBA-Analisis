@@ -63,14 +63,15 @@ function injuryStatusBlocks(status: unknown, injury: any): boolean {
 
 function extractAvailability(summary: any, expectedEspnTeamIds: string[], localTeamByEspn: Map<string, string>) {
   const injuryGroups = summary?.injuries;
-  if (!Array.isArray(injuryGroups)) return { verified: false, candidates: [], reason: "injury_report_unavailable" };
-  const reportedTeams = new Set(injuryGroups.map((group: any) => String(group?.team?.id ?? "")));
-  if (!expectedEspnTeamIds.every((id) => reportedTeams.has(id))) {
-    return { verified: false, candidates: [], reason: "injury_report_incomplete" };
-  }
+  const injuryReportAvailable = Array.isArray(injuryGroups);
+  const reportedTeams = new Set((injuryGroups ?? []).map((group: any) => String(group?.team?.id ?? "")));
+  const injuryReportComplete = injuryReportAvailable &&
+    expectedEspnTeamIds.every((id) => reportedTeams.has(id));
 
+  // ESPN sometimes omits the injury report even when its active starting lineup is present.
+  // Keep confirmed active starters in that case, but explicitly mark availability as unverified.
   const injuredIds = new Set<string>();
-  for (const group of injuryGroups) {
+  for (const group of injuryGroups ?? []) {
     for (const injury of group?.injuries ?? []) {
       const id = String(injury?.athlete?.id ?? "");
       if (id && injuryStatusBlocks(injury?.status ?? injury?.type?.description, injury)) injuredIds.add(id);
@@ -78,7 +79,12 @@ function extractAvailability(summary: any, expectedEspnTeamIds: string[], localT
   }
 
   const players = summary?.boxscore?.players;
-  if (!Array.isArray(players)) return { verified: true, candidates: [], reason: "starting_lineups_unavailable" };
+  if (!Array.isArray(players)) return {
+    verified: false, candidates: [],
+    reason: !injuryReportAvailable ? "injury_report_unavailable_and_lineups_unavailable"
+      : !injuryReportComplete ? "injury_report_incomplete_and_lineups_unavailable"
+      : "starting_lineups_unavailable"
+  };
   const byPlayer = new Map<string, any>();
   for (const teamGroup of players) {
     const espnTeamId = String(teamGroup?.team?.id ?? "");
@@ -97,12 +103,18 @@ function extractAvailability(summary: any, expectedEspnTeamIds: string[], localT
           player_name: athlete?.displayName ?? athlete?.fullName ?? entry?.displayName ?? "Jugador",
           position: athlete?.position?.abbreviation ?? athlete?.position?.displayName ?? null,
           starter_confirmed: true,
-          injury_clear: true,
+          injury_clear: injuryReportComplete,
         });
       }
     }
   }
-  return { verified: true, candidates: [...byPlayer.values()], reason: byPlayer.size ? null : "no_confirmed_healthy_starters" };
+  return {
+    verified: injuryReportComplete,
+    candidates: [...byPlayer.values()],
+    reason: byPlayer.size
+      ? (injuryReportComplete ? null : (!injuryReportAvailable ? "injury_report_unavailable" : "injury_report_incomplete"))
+      : "no_confirmed_active_starters"
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -314,8 +326,8 @@ Deno.serve(async (req: Request) => {
           team_abbreviation: team?.abbreviation ?? "",
           position: player.position ?? candidate.position,
           starter_confirmed: true,
-          injury_clear: true,
-          availability_source: "ESPN game summary",
+          injury_clear: candidate.injury_clear === true,
+          availability_source: candidate.injury_clear === true ? "ESPN lineup and complete injury report" : "ESPN active lineup; injury report incomplete",
           availability_checked_at: nowIso,
           predicted_points: project("points"),
           predicted_rebounds: project("rebounds"),
@@ -336,7 +348,7 @@ Deno.serve(async (req: Request) => {
         forecasts.push(forecast);
         const snapshot = {
           game_id: candidate.game_id, player_id: playerId, player_history: history,
-          starter_confirmed: true, injury_clear: true, availability_source: "ESPN",
+          starter_confirmed: true, injury_clear: candidate.injury_clear === true, availability_source: candidate.injury_clear === true ? "ESPN" : "ESPN active lineup; injury report incomplete",
         };
         predictionRows.push({
           game_id: candidate.game_id, model_version_id: activeModelId,
@@ -374,7 +386,7 @@ Deno.serve(async (req: Request) => {
       }
       for (const row of saved ?? []) {
         const forecast = row.forecast ?? {};
-        if (forecast.starter_confirmed !== true || forecast.injury_clear !== true) continue;
+        if (forecast.starter_confirmed !== true) continue;
         const game = slateGames.find((g: any) => g.id === row.game_id);
         if (!game) continue;
         // Keep the original pre-game availability verification in the immutable forecast.
