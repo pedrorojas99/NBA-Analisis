@@ -161,6 +161,7 @@ Deno.serve(async (req: Request) => {
     const availabilityByGame = new Map<string, any>();
     const skipped: any[] = [];
     for (const game of slateGames) {
+      if (slateStatus === "in_progress" && (game.status === "in_progress" || game.status === "final" || Date.parse(game.scheduled_start) <= now.getTime())) continue;
       const homeEspn = espnTeamByLocal.get(game.home_team_id);
       const awayEspn = espnTeamByLocal.get(game.away_team_id);
       if (!homeEspn || !awayEspn) {
@@ -176,7 +177,7 @@ Deno.serve(async (req: Request) => {
       try {
         const response = await fetch(`${ESPN_BASE}/summary?event=${encodeURIComponent(mapping.data.source_game_id)}`, {
           headers: { accept: "application/json", "user-agent": "NBA-Analytics/1.0 player-predictions" },
-          signal: AbortSignal.timeout(18000),
+          signal: AbortSignal.timeout(6000),
         });
         if (!response.ok) {
           skipped.push({ game_id: game.id, reason: `espn_summary_http_${response.status}` });
@@ -375,7 +376,7 @@ Deno.serve(async (req: Request) => {
         if (forecast.starter_confirmed !== true || forecast.injury_clear !== true) continue;
         const game = slateGames.find((g: any) => g.id === row.game_id);
         if (!game) continue;
-        if (game.status !== "final") {
+        if (game.status === "scheduled" && Date.parse(game.scheduled_start) > now.getTime()) {
           const ids = candidateIdsByGame.get(game.id) ?? new Set<string>();
           const mapping = (await supabase.from("player_source_ids").select("source_player_id")
             .eq("source_name", "espn").eq("player_id", forecast.player_id).maybeSingle()).data?.source_player_id;
