@@ -25,7 +25,7 @@ class _BasketballLogoPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final sx = size.width / 100;
     final sy = size.height / 100;
-    final a = Path()
+    final a = Path()..fillType = PathFillType.evenOdd
       ..moveTo(50 * sx, 4 * sy)
       ..lineTo(5 * sx, 96 * sy)
       ..lineTo(29 * sx, 96 * sy)
@@ -33,6 +33,10 @@ class _BasketballLogoPainter extends CustomPainter {
       ..lineTo(61 * sx, 74 * sy)
       ..lineTo(71 * sx, 96 * sy)
       ..lineTo(95 * sx, 96 * sy)
+      ..close()
+      ..moveTo(50 * sx, 42 * sy)
+      ..lineTo(40 * sx, 67 * sy)
+      ..lineTo(60 * sx, 67 * sy)
       ..close();
     final paint = Paint()..color = const Color(0xFFEF6C35);
     canvas.drawPath(a, paint);
