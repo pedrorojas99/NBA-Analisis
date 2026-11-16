@@ -63,7 +63,11 @@ class _BasketballLogoPainter extends CustomPainter {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int themeIndex;
+  final ValueChanged<int> onThemeChanged;
+  const HomeScreen({super.key, this.themeIndex = 0, this.onThemeChanged = _ignoreThemeChange});
+
+  static void _ignoreThemeChange(int value) {}
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -272,15 +276,32 @@ class _HomeScreenState extends State<HomeScreen> {
             tooltip: 'Menú',
             onSelected: (value) {
               if (value == 'app_update') _checkForAppUpdate();
+              if (value.startsWith('theme_')) {
+                final selected = int.tryParse(value.substring(6));
+                if (selected != null) widget.onThemeChanged(selected);
+              }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
                 value: 'app_update',
                 child: Row(children: [
                   Icon(Icons.system_update_alt),
                   SizedBox(width: 10),
                   Text('Actualizar APK'),
                 ]),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'theme_0',
+                child: Row(children: [Icon(Icons.palette_outlined), SizedBox(width: 10), Text('Tema actual · Azul claro')]),
+              ),
+              const PopupMenuItem(
+                value: 'theme_1',
+                child: Row(children: [Icon(Icons.wb_sunny_outlined), SizedBox(width: 10), Text('Tema cálido · Crema')]),
+              ),
+              const PopupMenuItem(
+                value: 'theme_2',
+                child: Row(children: [Icon(Icons.nightlight_round), SizedBox(width: 10), Text('Tema cálido · Oscuro')]),
               ),
             ],
           ),
