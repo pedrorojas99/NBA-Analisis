@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
     const historicalIds = (historicalGames ?? []).map((game: any) => game.id);
     const { data: results, error: resultsError } = historicalIds.length
       ? await supabase.from("game_results")
-          .select("game_id,home_score,away_score,is_final")
+          .select("game_id,home_score,away_score,is_final,confirmed_at,confirmation_sources")
           .in("game_id", historicalIds).eq("is_final", true)
       : { data: [], error: null };
     if (resultsError) throw new Error("Final results query failed: " + resultsError.message);
@@ -185,6 +185,65 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    let predictionsEvaluated = 0;
+    if (persistRequested && resultByGame.size) {
+      const finalGameIds = [...resultByGame.keys()];
+      const { data: savedPredictions, error: savedPredictionsError } = await supabase
+        .from("predictions").select("id,game_id,forecast").in("game_id", finalGameIds);
+      if (savedPredictionsError) throw new Error("Prediction history lookup for evaluation failed: " + savedPredictionsError.message);
+      const historicalById = new Map((historicalGames ?? []).map((game: any) => [game.id, game]));
+      const evaluationRows: any[] = [];
+      for (const prediction of savedPredictions ?? []) {
+        const actual: any = resultByGame.get(prediction.game_id);
+        const game: any = historicalById.get(prediction.game_id);
+        const forecast: any = prediction.forecast ?? {};
+        if (!actual || !game) continue;
+        const predictedHome = Number(forecast.predicted_home_score);
+        const predictedAway = Number(forecast.predicted_away_score);
+        const homeWinProbability = Number(forecast.home_win_probability) / 100;
+        if (!Number.isFinite(predictedHome) || !Number.isFinite(predictedAway) ||
+            !Number.isFinite(homeWinProbability) || homeWinProbability < 0 || homeWinProbability > 1) continue;
+        const actualHome = Number(actual.home_score);
+        const actualAway = Number(actual.away_score);
+        const actualHomeWin = actualHome > actualAway;
+        const predictedHomeWin = homeWinProbability >= 0.5;
+        const actualMargin = actualHome - actualAway;
+        const predictedMargin = predictedHome - predictedAway;
+        evaluationRows.push({
+          prediction_id: prediction.id,
+          actual: {
+            game_id: prediction.game_id,
+            home_team_id: game.home_team_id,
+            away_team_id: game.away_team_id,
+            home_score: actualHome,
+            away_score: actualAway,
+            winner_team_id: actualHomeWin ? game.home_team_id : game.away_team_id,
+            confirmed_at: actual.confirmed_at,
+          },
+          error_metrics: {
+            winner_correct: predictedHomeWin === actualHomeWin,
+            home_score_abs_error: Number(Math.abs(predictedHome - actualHome).toFixed(2)),
+            away_score_abs_error: Number(Math.abs(predictedAway - actualAway).toFixed(2)),
+            total_score_abs_error: Number(Math.abs((predictedHome + predictedAway) - (actualHome + actualAway)).toFixed(2)),
+            margin_abs_error: Number(Math.abs(predictedMargin - actualMargin).toFixed(2)),
+            brier_score: Number(((homeWinProbability - (actualHomeWin ? 1 : 0)) ** 2).toFixed(4)),
+            predicted_home_win_probability: Number((homeWinProbability * 100).toFixed(1)),
+          },
+          result_source_names: Array.isArray(actual.confirmation_sources) && actual.confirmation_sources.length
+            ? actual.confirmation_sources : ["unknown"],
+        });
+      }
+      for (let offset = 0; offset < evaluationRows.length; offset += 50) {
+        const { data: inserted, error: evaluationError } = await supabase.from("prediction_evaluations")
+          .upsert(evaluationRows.slice(offset, offset + 50), {
+            onConflict: "prediction_id",
+            ignoreDuplicates: true,
+          }).select("id");
+        if (evaluationError) throw new Error("Prediction evaluation persistence failed: " + evaluationError.message);
+        predictionsEvaluated += inserted?.length ?? 0;
+      }
+    }
+
     return json({
       ok: true,
       generated_at: nowIso,
@@ -206,6 +265,7 @@ Deno.serve(async (req: Request) => {
         games_skipped: skipped.length,
         persistence_requested: persistRequested,
         predictions_persisted: predictionsPersisted,
+        predictions_evaluated: predictionsEvaluated,
       },
     });
   } catch (error) {
