@@ -548,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _teamScoreRow(String abbreviation, String name, int? score) => Row(
     children: [
       Image.network(
-        'https://a.espncdn.com/i/teamlogos/nba/500/${abbreviation.toLowerCase()}.png',
+        'https://a.espncdn.com/i/teamlogos/nba/500/${({'GSW': 'gs', 'NY': 'ny', 'NO': 'no', 'SA': 'sa', 'UTAH': 'utah'}[abbreviation.toUpperCase()] ?? abbreviation.toLowerCase())}.png',
         width: 34, height: 34, fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => const Icon(Icons.sports_basketball, size: 28, color: Color(0xFFEF6C35)),
       ),
