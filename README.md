@@ -12,7 +12,7 @@ Aplicación Flutter para Android que combina datos NBA recopilados desde ESPN, e
 - Motor experimental de pronósticos por jornada: identifica la próxima fecha NBA usando el calendario de Estados Unidos (Eastern Time), espera a que todos los partidos de la jornada actual terminen y genera pronósticos solo para la siguiente fecha. Utiliza los últimos 10 partidos finalizados de cada equipo, exige al menos 5 partidos por equipo, estima puntos anotados/permitidos y ajusta la localía. Los snapshots se guardan en la nube con su versión, corte temporal y hash de las variables de entrada.
 - Probabilidades de victoria calculadas mediante una transformación logística no calibrada; deben interpretarse como estimaciones experimentales, no como probabilidades garantizadas.
 - Registro local de pronósticos manuales, conservando el pronóstico original al añadir el resultado real.
-- Pestaña «Jornada anterior»: muestra la última fecha NBA completamente evaluada con pronósticos originales, marcador final, ganador previsto/real, aciertos y errores de puntos. Solo incluye jornadas con todos los pronósticos guardados ya evaluados.
+- Sección «Jornada anterior» dentro de Historial: muestra la última fecha NBA completamente evaluada con pronósticos originales, marcador final, ganador previsto/real, aciertos y errores de puntos. Solo incluye jornadas con todos los pronósticos guardados ya evaluados.
 - Métricas descriptivas de acierto del ganador y error medio de puntos, separadas por versión registrada.
 
 ## Estado y límites actuales
