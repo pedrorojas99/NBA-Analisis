@@ -72,7 +72,10 @@ class NbaPredictionData {
 
 class NbaPredictionService {
   Future<NbaPredictionData> load() async {
-    final response = await Supabase.instance.client.functions.invoke('nba-predictions');
+    final response = await Supabase.instance.client.functions.invoke(
+      'nba-predictions',
+      body: const {'persist': true},
+    );
     if (response.status < 200 || response.status >= 300) {
       throw Exception('El motor de predicciones respondió con código ${response.status}');
     }
