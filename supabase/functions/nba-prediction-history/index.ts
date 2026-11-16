@@ -19,7 +19,15 @@ Deno.serve(async (req: Request) => {
       .eq("prediction_type", "game")
       .order("created_at", { ascending: false }).limit(100);
     if (predictionsError) throw new Error("Prediction history query failed: " + predictionsError.message);
-    const rows = predictions ?? [];
+    // Return one newest immutable forecast per game and model version.
+    // Repeated scheduled refreshes must not appear as separate historical predictions.
+    const latestByGameAndModel = new Map<string, any>();
+    for (const row of predictions ?? []) {
+      const key = `${row.game_id}:${row.model_version_id}`;
+      if (!latestByGameAndModel.has(key)) latestByGameAndModel.set(key, row);
+    }
+    const rows = [...latestByGameAndModel.values()]
+      .sort((a: any, b: any) => Date.parse(b.created_at) - Date.parse(a.created_at));
     const gameIds = [...new Set(rows.map((row: any) => row.game_id))];
     const predictionIds = rows.map((row: any) => row.id);
     const { data: games, error: gamesError } = gameIds.length
