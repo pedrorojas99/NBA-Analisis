@@ -14,6 +14,7 @@ class NbaPlayerForecast {
   final double threes;
   final double minutes;
   final int sampleGames;
+  final bool injuryClear;
 
   const NbaPlayerForecast({
     required this.gameId,
@@ -29,6 +30,7 @@ class NbaPlayerForecast {
     required this.threes,
     required this.minutes,
     required this.sampleGames,
+    this.injuryClear = false,
   });
 
   factory NbaPlayerForecast.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,7 @@ class NbaPlayerForecast {
       threes: number('predicted_threes'),
       minutes: number('predicted_minutes'),
       sampleGames: (json['sample_games'] as num?)?.toInt() ?? 0,
+      injuryClear: json['injury_clear'] == true,
     );
   }
 }
