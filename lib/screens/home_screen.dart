@@ -447,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ]);
     },
     child: ListView(padding: const EdgeInsets.all(16), children: [
-      _section('NBA · Partidos y marcadores'),
+
       Card(child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -484,9 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
       )),
       if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
         _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
-      _section(_latestCompletedSlateDate == null
-          ? 'Resultados de la jornada'
-          : 'Resultados de la jornada · ${_formatSlateDate(_latestCompletedSlateDate!)}'),
+
       if (_latestCompletedSlateGames.isEmpty)
         _empty('Todavía no hay una jornada completamente finalizada en los datos recientes.')
       else
@@ -597,7 +595,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (playerPredictionError != null)
         Padding(padding: const EdgeInsets.only(top: 6), child: Text('Datos individuales: $playerPredictionError', style: const TextStyle(fontSize: 11))),
       if (!playerPredictionLoading && playerForecasts.isEmpty)
-        const Padding(padding: EdgeInsets.only(top: 6), child: Text('Los pronósticos individuales aparecen cuando ESPN confirma titulares y disponibilidad.', style: TextStyle(fontSize: 11))),
+        const Padding(padding: EdgeInsets.only(top: 6), child: Text('Aún no hay titulares confirmados o historial suficiente para generar proyecciones individuales.', style: TextStyle(fontSize: 11))),
     ]);
   }
 
