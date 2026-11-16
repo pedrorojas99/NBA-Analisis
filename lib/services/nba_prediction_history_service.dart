@@ -55,15 +55,57 @@ class NbaStoredPrediction {
   }
 }
 
+class NbaTeamErrorSummary {
+  final String teamId;
+  final String team;
+  final String abbreviation;
+  final int gamesEvaluated;
+  final int homeGames;
+  final int awayGames;
+  final double winnerAccuracyPct;
+  final double meanPredictedPoints;
+  final double meanActualPoints;
+  final double pointsMae;
+  final double pointsBias;
+  final double opponentPointsMae;
+  final double marginMae;
+
+  const NbaTeamErrorSummary({
+    required this.teamId, required this.team, required this.abbreviation,
+    required this.gamesEvaluated, required this.homeGames, required this.awayGames,
+    required this.winnerAccuracyPct, required this.meanPredictedPoints,
+    required this.meanActualPoints, required this.pointsMae, required this.pointsBias,
+    required this.opponentPointsMae, required this.marginMae,
+  });
+
+  factory NbaTeamErrorSummary.fromJson(Map<String, dynamic> json) => NbaTeamErrorSummary(
+    teamId: (json['team_id'] ?? '').toString(),
+    team: (json['team'] ?? 'Equipo').toString(),
+    abbreviation: (json['abbreviation'] ?? '').toString(),
+    gamesEvaluated: (json['games_evaluated'] as num?)?.toInt() ?? 0,
+    homeGames: (json['home_games'] as num?)?.toInt() ?? 0,
+    awayGames: (json['away_games'] as num?)?.toInt() ?? 0,
+    winnerAccuracyPct: (json['winner_accuracy_pct'] as num?)?.toDouble() ?? 0,
+    meanPredictedPoints: (json['mean_predicted_points'] as num?)?.toDouble() ?? 0,
+    meanActualPoints: (json['mean_actual_points'] as num?)?.toDouble() ?? 0,
+    pointsMae: (json['points_mae'] as num?)?.toDouble() ?? 0,
+    pointsBias: (json['points_bias'] as num?)?.toDouble() ?? 0,
+    opponentPointsMae: (json['opponent_points_mae'] as num?)?.toDouble() ?? 0,
+    marginMae: (json['margin_mae'] as num?)?.toDouble() ?? 0,
+  );
+}
+
 class NbaPredictionHistoryData {
   final List<NbaStoredPrediction> forecasts;
   final int evaluatedCount;
   final int pendingCount;
+  final List<NbaTeamErrorSummary> teamAnalysis;
 
   const NbaPredictionHistoryData({
     required this.forecasts,
     required this.evaluatedCount,
     required this.pendingCount,
+    required this.teamAnalysis,
   });
 
   factory NbaPredictionHistoryData.fromJson(Map<String, dynamic> json) {
@@ -75,6 +117,10 @@ class NbaPredictionHistoryData {
           .toList(),
       evaluatedCount: (meta['evaluated_predictions'] as num?)?.toInt() ?? 0,
       pendingCount: (meta['pending_evaluations'] as num?)?.toInt() ?? 0,
+      teamAnalysis: (json['team_analysis'] as List? ?? [])
+          .whereType<Map>()
+          .map((row) => NbaTeamErrorSummary.fromJson(Map<String, dynamic>.from(row)))
+          .toList(),
     );
   }
 }
