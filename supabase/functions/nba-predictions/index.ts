@@ -46,7 +46,11 @@ Deno.serve(async (req: Request) => {
   try {
     const now = new Date();
     const nowIso = now.toISOString();
-    const futureIso = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const futureIso = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const slateWindowStart = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
+    const nbaDateKey = (value: string) => new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(value));
 
     const { data: historicalGames, error: historyError } = await supabase
       .from("games")
@@ -83,15 +87,32 @@ Deno.serve(async (req: Request) => {
     }
     for (const rows of teamHistory.values()) rows.sort((a, b) => b.date - a.date);
 
-    const { data: upcomingGames, error: upcomingError } = await supabase
+    // Select exactly one NBA slate (Eastern Time), not an arbitrary rolling 7-day window.
+    // Include recently started games so an unfinished current slate blocks the next one.
+    const { data: slateWindowGames, error: upcomingError } = await supabase
       .from("games")
       .select("id,season,scheduled_start,status,home_team_id,away_team_id,is_neutral_site")
-      .gte("scheduled_start", nowIso)
+      .gte("scheduled_start", slateWindowStart)
       .lte("scheduled_start", futureIso)
-      .eq("status", "scheduled")
       .order("scheduled_start", { ascending: true })
-      .limit(100);
-    if (upcomingError) throw new Error("Upcoming games query failed: " + upcomingError.message);
+      .limit(250);
+    if (upcomingError) throw new Error("NBA slate query failed: " + upcomingError.message);
+
+    const nonFinalDates = [...new Set((slateWindowGames ?? [])
+      .filter((game: any) => game.status !== "final")
+      .map((game: any) => nbaDateKey(game.scheduled_start)))].sort();
+    const slateDate = nonFinalDates[0] ?? null;
+    const slateGames = slateDate
+      ? (slateWindowGames ?? []).filter((game: any) => nbaDateKey(game.scheduled_start) === slateDate)
+      : [];
+    const slateHasStarted = slateGames.some((game: any) =>
+      game.status === "in_progress" || game.status === "final" ||
+      Date.parse(game.scheduled_start) <= now.getTime()
+    );
+    const slateStatus = !slateDate ? "no_upcoming_slate" : (slateHasStarted ? "in_progress" : "ready");
+    const upcomingGames = slateStatus === "ready"
+      ? slateGames.filter((game: any) => game.status === "scheduled")
+      : [];
 
     const teamIds = [...new Set((upcomingGames ?? []).flatMap((game: any) => [game.home_team_id, game.away_team_id]))];
     const { data: teams, error: teamsError } = teamIds.length
@@ -250,7 +271,7 @@ Deno.serve(async (req: Request) => {
       model: {
         version: "rolling-form-0.1",
         name: "Rolling Form Baseline",
-        description: "Promedio de puntos anotados y permitidos en los últimos 10 partidos finalizados, con ventaja local de 2 puntos.",
+        description: "Pronostica únicamente la próxima jornada NBA (fecha de calendario en hora del Este). Espera al cierre de la jornada en curso; usa los últimos 10 partidos finalizados de cada equipo, con ventaja local de 2 puntos.",
         minimum_games_per_team: 5,
         probability_method: "Logística sobre diferencia estimada de puntos; no calibrada aún.",
         status: "experimental",
@@ -260,7 +281,10 @@ Deno.serve(async (req: Request) => {
       meta: {
         historical_final_games: results?.length ?? 0,
         teams_with_history: teamHistory.size,
-        upcoming_games: upcomingGames?.length ?? 0,
+        upcoming_games: upcomingGames.length,
+        slate_date: slateDate,
+        slate_status: slateStatus,
+        slate_games: slateGames.length,
         forecasts_generated: forecasts.length,
         games_skipped: skipped.length,
         persistence_requested: persistRequested,
