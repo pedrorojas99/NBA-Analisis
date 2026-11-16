@@ -62,6 +62,12 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     for (final category in (value['categories'] as List? ?? [])) {
       if (category is Map && category['values'] is Map) result.addAll(Map<String, dynamic>.from(category['values'] as Map));
     }
+    for (final item in (value['statistics'] as List? ?? [])) {
+      if (item is Map) {
+        final key = (item['abbreviation'] ?? item['label'] ?? item['name'] ?? '').toString();
+        if (key.isNotEmpty) result[key] = item['displayValue'] ?? item['value'] ?? '—';
+      }
+    }
     if (value['values'] is Map) result.addAll(Map<String, dynamic>.from(value['values'] as Map));
     result.addAll(Map<String, dynamic>.from(value));
     return result;
