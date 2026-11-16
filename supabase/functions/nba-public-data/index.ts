@@ -89,8 +89,8 @@ Deno.serve(async (req: Request) => {
       if (!gameId) return json({ ok: false, error: "Se requiere game_id." }, 400);
       const [{ data: game, error: gameError }, { data: teamRows, error: teamError }, { data: playerRows, error: playerError }] = await Promise.all([
         supabase.from("games").select("id,scheduled_start,status,home_team_id,away_team_id").eq("id", gameId).maybeSingle(),
-        supabase.from("team_game_stats").select("team_id,stats,validation_status").eq("game_id", gameId).neq("validation_status", "rejected"),
-        supabase.from("player_game_stats").select("player_id,team_id,stats,validation_status").eq("game_id", gameId).neq("validation_status", "rejected")
+        supabase.from("team_game_stats").select("team_id,stats,validation_status,captured_at").eq("game_id", gameId).neq("validation_status", "rejected").order("captured_at", { ascending: false }),
+        supabase.from("player_game_stats").select("player_id,team_id,stats,validation_status,captured_at").eq("game_id", gameId).neq("validation_status", "rejected").order("captured_at", { ascending: false })
       ]);
       if (gameError) throw new Error("Game lookup failed: " + gameError.message);
       if (teamError) throw new Error("Game team stats query failed: " + teamError.message);
@@ -106,13 +106,17 @@ Deno.serve(async (req: Request) => {
       if (playersError) throw new Error("Game players lookup failed: " + playersError.message);
       const teamById = new Map((teams ?? []).map((row: any) => [row.id, row]));
       const playerById = new Map((players ?? []).map((row: any) => [row.id, row]));
+      const latestTeamStats = new Map<string, any>();
+      for (const row of teamRows ?? []) if (!latestTeamStats.has(row.team_id)) latestTeamStats.set(row.team_id, row);
+      const latestPlayerStats = new Map<string, any>();
+      for (const row of playerRows ?? []) if (!latestPlayerStats.has(row.player_id)) latestPlayerStats.set(row.player_id, row);
       return json({
         ok: true, game,
-        team_stats: (teamRows ?? []).map((row: any) => ({
+        team_stats: [...latestTeamStats.values()].map((row: any) => ({
           ...row, team_name: (teamById.get(row.team_id) as any)?.display_name ?? "Equipo",
           team_abbreviation: (teamById.get(row.team_id) as any)?.abbreviation ?? ""
         })),
-        player_stats: (playerRows ?? []).map((row: any) => ({
+        player_stats: [...latestPlayerStats.values()].map((row: any) => ({
           ...row, player_name: (playerById.get(row.player_id) as any)?.display_name ?? "Jugador",
           team_abbreviation: (teamById.get(row.team_id) as any)?.abbreviation ?? ""
         }))
