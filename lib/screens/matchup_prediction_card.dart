@@ -133,9 +133,10 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
       if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(snapshot.error.toString())));
       final games = snapshot.data ?? [];
-      if (games.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('No hay cinco enfrentamientos históricos completos en los datos recopilados.')));
+      if (games.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Todavía no hay enfrentamientos registrados entre estos equipos en el historial recopilado.')));
       return ListView(padding: const EdgeInsets.all(12), children: [
         const Text('Últimos enfrentamientos directos finalizados', style: TextStyle(fontWeight: FontWeight.w900)),
+        Text('Se muestran ${games.length} de 5 partidos disponibles en el historial sincronizado.', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
         const SizedBox(height: 8),
         ...games.map((g) => Card(
           color: const Color(0xFFF0F5FA),
@@ -143,9 +144,13 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
             Text(_date(g['date']), style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
             Row(children: [
               Expanded(child: Text(g['away_team']?.toString() ?? 'Visitante', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
+              _teamLogo(g['away_abbreviation']?.toString()),
+              const SizedBox(width: 5),
               Text('${g['away_score']} - ${g['home_score']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
+              _teamLogo(g['home_abbreviation']?.toString()),
+              const SizedBox(width: 5),
               Expanded(child: Text(g['home_team']?.toString() ?? 'Local', style: const TextStyle(fontWeight: FontWeight.bold))),
             ]),
             Text('Ganador: ${g['winner']}', style: const TextStyle(fontSize: 11)),
