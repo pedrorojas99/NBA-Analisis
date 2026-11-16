@@ -43,6 +43,8 @@ function playerRows(boxPlayers: any[]) {
         if (!values.length) continue;
         const mapped: Record<string, unknown> = {};
         names.forEach((name: string, i: number) => { if (values[i] !== undefined) mapped[name] = values[i]; });
+        // Do not persist DNP / not-yet-played rows as zero-minute player performances.
+        if (["-", "--", "DNP"].includes(String(mapped.MIN ?? "").trim().toUpperCase())) continue;
         const id = String(athlete.id);
         const existing = byId.get(id) ?? {
           espn_id: id,
