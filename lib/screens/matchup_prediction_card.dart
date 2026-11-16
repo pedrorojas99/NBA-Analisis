@@ -28,6 +28,15 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     _headToHead = _loadHeadToHead();
   }
 
+  @override
+  void didUpdateWidget(covariant MatchupPredictionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.homeTeam?.id != widget.homeTeam?.id ||
+        oldWidget.awayTeam?.id != widget.awayTeam?.id) {
+      _headToHead = _loadHeadToHead();
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _loadHeadToHead() async {
     final homeId = widget.homeTeam?.id;
     final awayId = widget.awayTeam?.id;
