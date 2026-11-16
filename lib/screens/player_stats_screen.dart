@@ -15,8 +15,16 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
   String? selectedPlayerId;
   int? selectedSeason;
   String search = '';
+  bool showPlayerSuggestions = false;
+  late final TextEditingController searchController = TextEditingController();
   bool loading = true;
   String? error;
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -131,28 +139,50 @@ class _PlayerStatsScreenState extends State<PlayerStatsScreen> {
           const Text('Consulta promedios calculados a partir de los partidos que ya tienen estadísticas registradas.'),
           const SizedBox(height: 16),
           TextField(
+            controller: searchController,
             decoration: const InputDecoration(
-              labelText: 'Buscar jugador', prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(), isDense: true,
+              labelText: 'Buscar jugador', hintText: 'Ej. Leb',
+              prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true,
             ),
-            onChanged: (value) => setState(() => search = value),
+            onChanged: (value) => setState(() {
+              search = value;
+              showPlayerSuggestions = value.trim().isNotEmpty;
+            }),
           ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: dropdownPlayerId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Jugador', border: OutlineInputBorder()),
-            items: filteredPlayers.map((p) => DropdownMenuItem<String>(
-              value: p['id'].toString(),
-              child: Text('${p['name']} · ${p['position'] ?? '—'}', overflow: TextOverflow.ellipsis),
-            )).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() { selectedPlayerId = value; selectedSeason = null; });
-                _load(playerId: value);
-              }
-            },
-          ),
+          if (showPlayerSuggestions && search.trim().isNotEmpty)
+            Card(
+              margin: const EdgeInsets.only(top: 4),
+              child: Column(
+                children: [
+                  ...filteredPlayers.take(8).map((player) => ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.person_search),
+                    title: Text(player['name']?.toString() ?? 'Jugador'),
+                    subtitle: Text('${player['position'] ?? 'Posición —'} · ${player['games_count'] ?? 0} partidos'),
+                    onTap: () {
+                      final id = player['id'].toString();
+                      final name = player['name']?.toString() ?? '';
+                      setState(() {
+                        selectedPlayerId = id;
+                        selectedSeason = null;
+                        search = name;
+                        searchController.text = name;
+                        showPlayerSuggestions = false;
+                      });
+                      _load(playerId: id);
+                    },
+                  )),
+                  if (filteredPlayers.isEmpty)
+                    const ListTile(title: Text('No se encontraron jugadores')),
+                ],
+              ),
+            ),
+          if (selected != null && !showPlayerSuggestions)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('Jugador seleccionado: ${selected['name']}',
+                style: Theme.of(context).textTheme.bodySmall),
+            ),
           const SizedBox(height: 10),
           if (seasons.isNotEmpty)
             DropdownButtonFormField<int?>(
