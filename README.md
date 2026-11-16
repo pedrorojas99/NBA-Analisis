@@ -20,7 +20,7 @@ Aplicación Flutter para Android que combina datos NBA recopilados desde ESPN, e
 - Los promedios de jugadores representan únicamente los partidos que ya están guardados; no deben interpretarse como promedios completos de temporada.
 - La sincronización histórica se ejecuta por lotes diarios. La cobertura histórica todavía está en proceso de ampliación.
 - Los pronósticos automáticos están activos como primera versión experimental (`rolling-form-0.1`). El motor devuelve pronósticos de próximos partidos, pero todavía no guarda automáticamente cada pronóstico en las tablas de historial en la nube.
-- El modelo no está calibrado y todavía no entrena ni modifica automáticamente sus parámetros. La evaluación automática de cada pronóstico frente al resultado final y las métricas agregadas por versión siguen pendientes. Las variantes nuevas deben compararse mediante backtests sin fuga de datos antes de reemplazar el modelo vigente.
+- El modelo no está calibrado y todavía no entrena ni modifica automáticamente sus parámetros. Cuando aparece el resultado final, el motor registra una evaluación inmutable por pronóstico con errores de puntos, acierto del ganador y Brier score; esta evaluación se procesa al cargar pronósticos o mediante la ejecución diaria. La pantalla de historial y las métricas agregadas por versión siguen pendientes. Las variantes nuevas deben compararse mediante backtests sin fuga de datos antes de reemplazar el modelo vigente.
 - El registro local del teléfono no equivale todavía a un historial de pronósticos sincronizado y auditable en la nube.
 - Las estadísticas de jugadores que no hayan superado la validación de calidad no deben utilizarse como datos de entrenamiento.
 
