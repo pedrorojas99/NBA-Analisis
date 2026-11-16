@@ -788,6 +788,53 @@ class _HomeScreenState extends State<HomeScreen> {
       _section('Centro de aprendizaje'),
       const Text('La nube compara cada pronóstico guardado con el marcador final. Estas métricas evalúan el modelo, pero todavía no cambian sus parámetros automáticamente.'),
       const SizedBox(height: 12),
+      _section('Experimento · promedio histórico + últimos 10'),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Candidato historical-blend-0.1',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 6),
+          const Text('Combina al 50 % el promedio histórico de puntos anotados y permitidos con el promedio de los últimos 10 partidos. Prueba walk-forward inicial: 189 partidos, sin utilizar resultados futuros.'),
+          const SizedBox(height: 12),
+          Table(
+            columnWidths: const {
+              0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1),
+            },
+            children: const [
+              TableRow(children: [
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Métrica', style: TextStyle(fontWeight: FontWeight.bold))),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Actual', textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold))),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Candidato', textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold))),
+              ]),
+              TableRow(children: [
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Acierto ganador')),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('67,72 %', textAlign: TextAlign.end)),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('67,72 %', textAlign: TextAlign.end)),
+              ]),
+              TableRow(children: [
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Error total')),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('16,11 pts', textAlign: TextAlign.end)),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('16,06 pts', textAlign: TextAlign.end)),
+              ]),
+              TableRow(children: [
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Error de margen')),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('9,49 pts', textAlign: TextAlign.end)),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('9,45 pts', textAlign: TextAlign.end)),
+              ]),
+              TableRow(children: [
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Brier score')),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('0,2041', textAlign: TextAlign.end)),
+                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('0,2032', textAlign: TextAlign.end)),
+              ]),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('Estado: candidato no promovido. La mejora es mínima y el promedio histórico por sí solo rindió ligeramente mejor. Mantendremos el motor actual hasta reunir más partidos.',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        ]),
+      )),
+      const SizedBox(height: 12),
       _section('Evaluación automática en la nube'),
       Row(children: [
         Expanded(child: _metric('Pronósticos', '${cloudPredictions.length}')),
@@ -830,7 +877,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ));
       }),
       const SizedBox(height: 12),
-      const Text('Próxima etapa: incorporar datos NBA fiables, predicciones automáticas y entrenamiento validado con separación temporal entre entrenamiento y evaluación.'),
+      const Text('Próxima etapa: ampliar el historial validado, comparar nuevos candidatos mediante pruebas temporales y promover un modelo solo cuando demuestre una mejora consistente.'),
     ]);
   }
 
