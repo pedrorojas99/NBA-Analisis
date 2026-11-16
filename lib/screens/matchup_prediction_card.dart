@@ -110,6 +110,68 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     );
   }
 
+  String _statValue(dynamic value, {bool percent = false}) {
+    if (value is! num) return '—';
+    return percent ? '${value.toStringAsFixed(1)}%' : value.toStringAsFixed(1);
+  }
+
+  Widget _teamStatsComparison() {
+    final box = widget.forecast.teamBoxscore;
+    final home = Map<String, dynamic>.from(box['home'] as Map? ?? {});
+    final away = Map<String, dynamic>.from(box['away'] as Map? ?? {});
+    if (home.isEmpty || away.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Text('Estadísticas colectivas todavía no disponibles.'),
+      );
+    }
+    const rows = <(String, String, bool)>[
+      ('Tiros de campo', 'fgm', false),
+      ('Intentos de campo', 'fga', false),
+      ('% tiros de campo', 'fg_pct', true),
+      ('Triples anotados', 'threes_made', false),
+      ('Triples intentados', 'threes_attempted', false),
+      ('% triples', 'three_pct', true),
+      ('Tiros libres anotados', 'ftm', false),
+      ('Tiros libres intentados', 'fta', false),
+      ('% tiros libres', 'ft_pct', true),
+      ('Rebotes', 'rebounds', false),
+      ('Rebotes ofensivos', 'offensive_rebounds', false),
+      ('Rebotes defensivos', 'defensive_rebounds', false),
+      ('Asistencias', 'assists', false),
+      ('Robos', 'steals', false),
+      ('Tapones', 'blocks', false),
+      ('Pérdidas', 'turnovers', false),
+      ('Puntos en la pintura', 'points_in_paint', false),
+      ('Puntos al contraataque', 'fast_break_points', false),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Estadísticas colectivas proyectadas', style: TextStyle(fontWeight: FontWeight.w900)),
+      const SizedBox(height: 4),
+      Text('${widget.forecast.awayTeam} vs ${widget.forecast.homeTeam}', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+      const SizedBox(height: 6),
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(color: const Color(0xFFF0F5FA), borderRadius: BorderRadius.circular(9)),
+        child: Row(children: [
+          Expanded(child: Text(widget.forecast.awayTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          const SizedBox(width: 118, child: Text('Estadística', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(child: Text(widget.forecast.homeTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+        ]),
+      ),
+      ...rows.map((row) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
+        child: Row(children: [
+          Expanded(child: Text(_statValue(away[row.$2], percent: row.$3), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
+          SizedBox(width: 118, child: Text(row.$1, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Color(0xFF667788)))),
+          Expanded(child: Text(_statValue(home[row.$2], percent: row.$3), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
+        ]),
+      )),
+      const SizedBox(height: 4),
+      Text('Promedios basados en ${box['away_boxscore_samples'] ?? 0} partidos de ${widget.forecast.awayTeam} y ${box['home_boxscore_samples'] ?? 0} de ${widget.forecast.homeTeam}. Datos ESPN provisionales, pendientes de validación cruzada.', style: const TextStyle(fontSize: 10, color: Color(0xFF8A5A20))),
+    ]);
+  }
+
   Widget _predictionContent() {
     final f = widget.forecast;
     return Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -130,6 +192,8 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       ]),
       const SizedBox(height: 8),
       Text('Ganador estimado: ${f.predictedWinner}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
+      const Divider(height: 20),
+      _teamStatsComparison(),
       const Divider(height: 20),
       const Text('Pronósticos individuales', style: TextStyle(fontWeight: FontWeight.w900)),
       const Text('Se muestran titulares activos confirmados por ESPN. Si el informe de lesiones no está completo, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
