@@ -107,15 +107,26 @@ class NbaData {
 
 class NbaDataService {
   Future<NbaData> load() async {
-    final response = await Supabase.instance.client.functions.invoke('nba-public-data');
-    if (response.status < 200 || response.status >= 300) {
-      throw Exception('El servidor NBA respondió con código ' + response.status.toString());
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await Supabase.instance.client.functions.invoke('nba-public-data');
+        if (response.status < 200 || response.status >= 300) {
+          throw Exception('El servidor NBA respondió con código ${response.status}');
+        }
+        if (response.data is! Map) throw Exception('Respuesta NBA inválida.');
+        final body = Map<String, dynamic>.from(response.data as Map);
+        if (body['ok'] != true) {
+          throw Exception((body['error'] ?? 'No se pudieron cargar los partidos.').toString());
+        }
+        return NbaData.fromJson(body);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+        }
+      }
     }
-    if (response.data is! Map) throw Exception('Respuesta NBA inválida.');
-    final body = Map<String, dynamic>.from(response.data as Map);
-    if (body['ok'] != true) {
-      throw Exception((body['error'] ?? 'No se pudieron cargar los partidos.').toString());
-    }
-    return NbaData.fromJson(body);
+    throw Exception('No se pudo conectar con los datos NBA después de 3 intentos: $lastError');
   }
 }
