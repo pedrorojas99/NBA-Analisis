@@ -400,9 +400,35 @@ class _HomeScreenState extends State<HomeScreen> {
     ).reduce((a,b) => a+b) / done.length;
     final accuracy = done.isEmpty ? null : 100 * correct / done.length;
     final versions = done.map((p) => p.modelVersion).toSet().toList()..sort();
+    final cloudDone = cloudPredictions.where((p) => p.isEvaluated).toList();
+    final cloudCorrect = cloudDone.where((p) => p.errorMetrics!['winner_correct'] == true).length;
+    final cloudAccuracy = cloudDone.isEmpty ? null : 100 * cloudCorrect / cloudDone.length;
+    final cloudMarginError = cloudDone.isEmpty ? null : cloudDone
+        .map((p) => (p.errorMetrics!['margin_abs_error'] as num).toDouble())
+        .reduce((a, b) => a + b) / cloudDone.length;
+    final cloudBrier = cloudDone.isEmpty ? null : cloudDone
+        .map((p) => (p.errorMetrics!['brier_score'] as num).toDouble())
+        .reduce((a, b) => a + b) / cloudDone.length;
     return ListView(padding: const EdgeInsets.all(16), children: [
       _section('Centro de aprendizaje'),
-      const Text('Las métricas se calculan únicamente con pronósticos que ya tienen marcador real. No se afirma que el modelo aprenda automáticamente todavía.'),
+      const Text('La nube compara cada pronóstico guardado con el marcador final. Estas métricas evalúan el modelo, pero todavía no cambian sus parámetros automáticamente.'),
+      const SizedBox(height: 12),
+      _section('Evaluación automática en la nube'),
+      Row(children: [
+        Expanded(child: _metric('Pronósticos', '${cloudPredictions.length}')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Evaluados', '$cloudEvaluatedCount')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Pendientes', '$cloudPendingCount')),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: _metric('Acierto ganador', cloudAccuracy == null ? '—' : '${cloudAccuracy.toStringAsFixed(1)}%')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Error de margen', cloudMarginError == null ? '—' : '${cloudMarginError.toStringAsFixed(1)} pts')),
+        const SizedBox(width: 8),
+        Expanded(child: _metric('Brier score', cloudBrier == null ? '—' : cloudBrier.toStringAsFixed(3))),
+      ]),
       const SizedBox(height: 16),
       Row(children: [
         Expanded(child: _metric('Partidos evaluados', '${done.length}')),
