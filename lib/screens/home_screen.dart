@@ -247,7 +247,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _liveNbaPage() => RefreshIndicator(
-    onRefresh: refreshNbaData,
+    onRefresh: () async {
+      await Future.wait([
+        refreshNbaData(),
+        refreshPredictions(),
+        refreshPlayerPredictions(),
+      ]);
+    },
     child: ListView(padding: const EdgeInsets.all(16), children: [
       _section('NBA · Partidos y marcadores'),
       Card(child: Padding(
