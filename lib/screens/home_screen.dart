@@ -773,17 +773,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
   }
 
-  Widget _notice() => Card(
-    color: const Color(0xFF202B3B),
-    child: const Padding(padding: EdgeInsets.all(14), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('BASE FUNCIONAL · MODO LOCAL', style: TextStyle(fontWeight: FontWeight.bold)),
-        SizedBox(height: 6),
-        Text('La app ya consulta partidos y estadísticas NBA, genera pronósticos automáticos experimentales y guarda sus snapshots en la nube. Los pronósticos manuales siguen guardándose en este teléfono.'),
-      ],
-    )),
-  );
-
   Widget _section(String t) => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: Text(t, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
