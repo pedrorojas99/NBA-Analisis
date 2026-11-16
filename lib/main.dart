@@ -31,11 +31,11 @@ class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() => themeIndex = prefs.getInt('nba_theme_index')?.clamp(0, 2) ?? 0);
+    setState(() => themeIndex = prefs.getInt('nba_theme_index')?.clamp(0, 2).toInt() ?? 0);
   }
 
   Future<void> _setTheme(int value) async {
-    final safeValue = value.clamp(0, 2);
+    final safeValue = value.clamp(0, 2).toInt();
     setState(() => themeIndex = safeValue);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('nba_theme_index', safeValue);
