@@ -48,7 +48,9 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
   double _impact(NbaPlayerForecast p) => p.points + p.rebounds * 1.2 + p.assists * 1.5;
 
   Widget _teamLogo(String? abbreviation) {
-    final code = (abbreviation ?? '').toLowerCase();
+    final raw = (abbreviation ?? '').toUpperCase();
+    const aliases = {'GSW': 'gs', 'NY': 'ny', 'NO': 'no', 'SA': 'sa', 'UTAH': 'utah'};
+    final code = aliases[raw] ?? raw.toLowerCase();
     if (code.isEmpty) return const Icon(Icons.sports_basketball, color: Color(0xFFEF6C35), size: 42);
     return Image.network(
       'https://a.espncdn.com/i/teamlogos/nba/500/$code.png',
