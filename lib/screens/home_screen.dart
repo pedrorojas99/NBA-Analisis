@@ -301,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const PopupMenuItem(
                 value: 'theme_2',
-                child: Row(children: [Icon(Icons.nightlight_round), SizedBox(width: 10), Text('Tema cálido · Oscuro')]),
+                child: Row(children: [Icon(Icons.nightlight_round), SizedBox(width: 10), Text('Tema cálido · Atardecer')]),
               ),
             ],
           ),
