@@ -29,7 +29,7 @@ jobs:
               android:width="108dp" android:height="108dp"
               android:viewportWidth="108" android:viewportHeight="108">
               <path android:fillColor="#EF6C35"
-                  android:pathData="M54,5 L7,103 L31,103 L41,81 L67,81 L77,103 L101,103 Z"/>
+                  android:fillType="evenOdd" android:pathData="M54,5 L7,103 L31,103 L41,81 L67,81 L77,103 L101,103 Z M54,43 L43,69 L65,69 Z"/>
               <path android:fillColor="@android:color/transparent" android:strokeColor="#252B33"
                   android:strokeWidth="4" android:strokeLineCap="round"
                   android:pathData="M51,9 C38,34 27,63 15,91"/>
