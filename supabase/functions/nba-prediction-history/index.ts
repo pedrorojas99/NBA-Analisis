@@ -16,6 +16,7 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: predictions, error: predictionsError } = await supabase.from("predictions")
       .select("id,game_id,created_at,feature_cutoff_at,forecast,model_version_id")
+      .eq("prediction_type", "game")
       .order("created_at", { ascending: false }).limit(100);
     if (predictionsError) throw new Error("Prediction history query failed: " + predictionsError.message);
     const rows = predictions ?? [];
