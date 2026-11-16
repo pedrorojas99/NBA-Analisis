@@ -14,6 +14,7 @@ class NbaForecast {
   final String awayRecentRecord;
   final int homeSample;
   final int awaySample;
+  final Map<String, dynamic> teamBoxscore;
 
   const NbaForecast({
     required this.gameId, required this.scheduledStart,
@@ -22,7 +23,7 @@ class NbaForecast {
     required this.predictedAwayScore, required this.homeWinProbability,
     required this.awayWinProbability, required this.homeRecentRecord,
     required this.awayRecentRecord, required this.homeSample,
-    required this.awaySample,
+    required this.awaySample, required this.teamBoxscore,
   });
 
   factory NbaForecast.fromJson(Map<String, dynamic> json) => NbaForecast(
@@ -39,6 +40,7 @@ class NbaForecast {
     awayRecentRecord: (json['away_recent_record'] ?? '—').toString(),
     homeSample: (json['home_sample'] as num?)?.toInt() ?? 0,
     awaySample: (json['away_sample'] as num?)?.toInt() ?? 0,
+    teamBoxscore: Map<String, dynamic>.from(json['team_boxscore'] as Map? ?? {}),
   );
 }
 
