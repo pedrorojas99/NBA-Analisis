@@ -4,7 +4,7 @@ const SECRET_KEYS = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
 const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ?? "{}");
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+const teamLogoSlug = (value: unknown) => {\n  const abbr = String(value ?? "").toUpperCase();\n  const aliases: Record<string, string> = { GSW: "gs", NY: "ny", NO: "no", SA: "sa", UTAH: "utah" };\n  return aliases[abbr] ?? abbr.toLowerCase();\n};\nconst json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" }
 });
 Deno.serve(async (req: Request) => {
@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
           game_id: game.id, date: game.scheduled_start, season: game.season,
           opponent: opponent?.display_name ?? "Rival",
           opponent_abbreviation: opponent?.abbreviation ?? "",
-          opponent_logo_url: opponent ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(opponent.abbreviation ?? "").toLowerCase()}.png` : null,
+          opponent_logo_url: opponent ? `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(opponent.abbreviation)}.png` : null,
           team_score: scored, opponent_score: conceded, won: scored > conceded,
           home_away: isHome ? "Local" : "Visitante"
         }];
@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
       const avg = (values: number[]) => values.length ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)) : null;
       return json({
         ok: true, teams: teamsOut,
-        team: { ...selected, logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${String(selected.abbreviation ?? "").toLowerCase()}.png` },
+        team: { ...selected, logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(selected.abbreviation)}.png` },
         summary: {
           games: history.length, wins, losses,
           win_pct: history.length ? Number((100 * wins / history.length).toFixed(1)) : null,
@@ -108,8 +108,8 @@ Deno.serve(async (req: Request) => {
           game_id: game.id, date: game.scheduled_start,
           home_team: home?.display_name ?? "Local", away_team: away?.display_name ?? "Visitante",
           home_abbreviation: home?.abbreviation ?? "", away_abbreviation: away?.abbreviation ?? "",
-          home_logo_url: home ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(home.abbreviation ?? "").toLowerCase()}.png` : null,
-          away_logo_url: away ? `https://a.espncdn.com/i/teamlogos/nba/500/${String(away.abbreviation ?? "").toLowerCase()}.png` : null,
+          home_logo_url: home ? `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(home.abbreviation)}.png` : null,
+          away_logo_url: away ? `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(away.abbreviation)}.png` : null,
           home_score: homeScore, away_score: awayScore,
           winner: homeScore > awayScore ? (home?.display_name ?? "Local") : (away?.display_name ?? "Visitante")
         }];
