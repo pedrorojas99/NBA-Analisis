@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/nba_data_service.dart';
 import '../models/prediction.dart';
 import '../services/prediction_store.dart';
+import '../services/nba_prediction_service.dart';
 import 'player_stats_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final store = PredictionStore();
   final nbaService = NbaDataService();
+  final predictionService = NbaPredictionService();
   int tab = 0;
   List<NbaGame> nbaGames = [];
   bool nbaLoading = true;
@@ -20,16 +22,38 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? nbaUpdatedAt;
   Map<String, dynamic> nbaMeta = {};
   List<NbaPlayerGameStat> nbaPlayerStats = [];
+  List<NbaForecast> nbaForecasts = [];
+  Map<String, dynamic> predictionMeta = {};
+  bool predictionLoading = true;
+  String? predictionError;
+  String predictionModelVersion = 'rolling-form-0.1';
   List<Prediction> predictions = [];
   bool loading = true;
 
   @override
-  void initState() { super.initState(); refresh(); refreshNbaData(); }
+  void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); }
 
   Future<void> refresh() async {
     final data = await store.load();
     if (!mounted) return;
     setState(() { predictions = data; loading = false; });
+  }
+
+  Future<void> refreshPredictions() async {
+    if (mounted) setState(() { predictionLoading = true; predictionError = null; });
+    try {
+      final data = await predictionService.load();
+      if (!mounted) return;
+      setState(() {
+        nbaForecasts = data.forecasts;
+        predictionMeta = data.meta;
+        predictionModelVersion = data.modelVersion;
+        predictionLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { predictionError = e.toString(); predictionLoading = false; });
+    }
   }
 
   Future<void> refreshNbaData() async {
@@ -80,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); }, icon: const Icon(Icons.refresh))],
+        actions: [IconButton(onPressed: () { refresh(); refreshNbaData(); refreshPredictions(); }, icon: const Icon(Icons.refresh))],
       ),
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
       floatingActionButton: tab == 2 ? FloatingActionButton.extended(
@@ -141,6 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
         _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
       ...nbaGames.map(_nbaGameCard),
+      const SizedBox(height: 12),
+      _predictionSection(),
       const SizedBox(height: 8),
       _section('Estadísticas individuales recientes'),
       if (nbaPlayerStats.isEmpty && !nbaLoading)
@@ -165,6 +191,75 @@ class _HomeScreenState extends State<HomeScreen> {
 
     ]),
   );
+
+  Widget _predictionSection() {
+    final total = predictionMeta['historical_final_games'] ?? 0;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _section('Predicciones automáticas'),
+      Card(
+        color: const Color(0xFF202B3B),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.auto_graph, color: Colors.lightBlueAccent),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('MODELO EXPERIMENTAL', style: TextStyle(fontWeight: FontWeight.bold))),
+              Text(predictionModelVersion, style: const TextStyle(fontSize: 11)),
+            ]),
+            const SizedBox(height: 7),
+            const Text('Usa los últimos 10 partidos finalizados de cada equipo. Requiere al menos 5 por equipo. La probabilidad todavía no está calibrada.'),
+            const SizedBox(height: 5),
+            Text('Resultados históricos disponibles: $total', style: const TextStyle(fontSize: 11)),
+          ]),
+        ),
+      ),
+      if (predictionLoading) const Padding(
+        padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator()),
+      ),
+      if (predictionError != null) Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Text('No se pudieron generar predicciones: $predictionError'),
+        ),
+      ),
+      if (!predictionLoading && predictionError == null && nbaForecasts.isEmpty)
+        _empty('No hay partidos futuros con suficiente historial para generar un pronóstico.'),
+      ...nbaForecasts.map((forecast) => Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(forecast.scheduledStart.toLocal().toString().substring(0, 16),
+              style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Text('${forecast.awayTeam} vs ${forecast.homeTeam}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(forecast.awayTeam, style: const TextStyle(fontSize: 12)),
+              Text(forecast.awayTeam == forecast.predictedWinner ? 'GANADOR PROBABLE' : ''),
+            ]),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(forecast.predictedAwayScore.toStringAsFixed(0),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(forecast.predictedHomeScore.toStringAsFixed(0),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(forecast.homeTeam, style: const TextStyle(fontSize: 12)),
+            ]),
+            const Divider(),
+            Text('Ganador estimado: ${forecast.predictedWinner}',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Probabilidad local: ${forecast.homeWinProbability.toStringAsFixed(1)}% · visitante: ${forecast.awayWinProbability.toStringAsFixed(1)}%'),
+            Text('Últimos partidos: visitante ${forecast.awayRecentRecord} · local ${forecast.homeRecentRecord}',
+              style: Theme.of(context).textTheme.bodySmall),
+            Text('Muestra: ${forecast.awaySample} / ${forecast.homeSample} partidos',
+              style: Theme.of(context).textTheme.bodySmall),
+          ]),
+        ),
+      )),
+    ]);
+  }
 
   Widget _nbaGameCard(NbaGame game) {
     final away = game.awayTeam;
