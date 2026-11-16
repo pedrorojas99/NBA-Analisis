@@ -448,29 +448,6 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     child: ListView(padding: const EdgeInsets.all(16), children: [
 
-      Card(child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(nbaUpdatedAt == null
-              ? 'Conectando con NBA Analytics…'
-              : 'Actualizado: ' + nbaUpdatedAt!.toLocal().toString().substring(0, 16)),
-          const SizedBox(height: 4),
-          const Text('El calendario se sincroniza en la nube cada 15 minutos. Desliza hacia abajo para actualizar ahora.',
-              style: TextStyle(fontSize: 12)),
-        ]),
-      )),
-      if (nbaMeta.isNotEmpty) Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Partidos: ${nbaMeta['games'] ?? 0} · Equipos: ${nbaMeta['teams'] ?? 0}'),
-            Text('Registros individuales: ${nbaMeta['player_stat_rows'] ?? 0}'),
-            Text('Registros por equipo: ${nbaMeta['team_stat_rows'] ?? 0}'),
-            const SizedBox(height: 4),
-            const Text('Estos recuentos corresponden a los partidos de esta ventana; no representan el total histórico.', style: TextStyle(fontSize: 11)),
-          ]),
-        ),
-      ),
       if (nbaLoading) const Padding(
         padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()),
       ),
@@ -520,7 +497,6 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _predictionSection() {
-    final total = predictionMeta['historical_final_games'] ?? 0;
     final slateStatus = (predictionMeta['slate_status'] ?? 'unknown').toString();
     final slateDate = (predictionMeta['slate_date'] ?? '—').toString();
     final slateGames = predictionMeta['slate_games'] ?? 0;
@@ -540,24 +516,6 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(child: Text(slateMessage)),
         ]),
       )),
-      Card(
-        color: const Color(0xFFEAF2FA),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.auto_graph, color: Color(0xFF1769AA)),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('MODELO EXPERIMENTAL', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF174A7E)))),
-              Text(predictionModelVersion, style: const TextStyle(fontSize: 11, color: Color(0xFF526477))),
-            ]),
-            const SizedBox(height: 7),
-            const Text('Analiza los últimos 10 partidos finalizados de cada equipo. La probabilidad todavía está en evaluación y no debe interpretarse como garantía.'),
-            const SizedBox(height: 5),
-            Text('Resultados históricos disponibles: $total', style: const TextStyle(fontSize: 11)),
-          ]),
-        ),
-      ),
       if (predictionLoading) const Padding(
         padding: EdgeInsets.all(18), child: Center(child: CircularProgressIndicator()),
       ),
@@ -725,8 +683,6 @@ class _HomeScreenState extends State<HomeScreen> {
     child: ListView(padding: const EdgeInsets.all(16), children: [
       _section('Pronósticos automáticos'),
       _totalScoreDistributionBar(),
-      const Text('NBA Analytics consulta el calendario y las estadísticas históricas, calcula los marcadores y guarda cada pronóstico en la nube. No necesitas introducir equipos ni puntos manualmente.'),
-      const SizedBox(height: 12),
       _predictionSection(),
       const SizedBox(height: 12),
     ]),
