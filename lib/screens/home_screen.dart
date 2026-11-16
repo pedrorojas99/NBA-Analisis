@@ -117,6 +117,15 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Buscando actualizaciones…')),
     );
+    bool progressDialogOpen = false;
+    StateSetter? updateProgressDialog;
+    double? downloadProgress;
+    var receivedBytes = 0;
+    var totalBytes = 0;
+
+    String formatBytes(int bytes) =>
+        '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
     try {
       final update = await appUpdateService.checkForUpdate();
       if (!mounted) return;
@@ -138,12 +147,70 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
       if (install != true || !mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Descargando APK… Android te pedirá confirmar la instalación.')),
+
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            updateProgressDialog = setDialogState;
+            final percent = downloadProgress == null
+                ? null
+                : (downloadProgress! * 100).round();
+            return AlertDialog(
+              title: Text('Descargando NBA Analytics · build ${update.buildNumber}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(value: downloadProgress),
+                  const SizedBox(height: 12),
+                  Text(percent == null ? 'Descargando…' : '$percent %'),
+                  const SizedBox(height: 4),
+                  Text(
+                    totalBytes > 0
+                        ? '${formatBytes(receivedBytes)} de ${formatBytes(totalBytes)}'
+                        : '${formatBytes(receivedBytes)} descargados',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No cierres la aplicación. Al terminar se abrirá el instalador de Android.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       );
-      await appUpdateService.downloadAndInstall(update);
+      progressDialogOpen = true;
+
+      await appUpdateService.downloadAndInstall(
+        update,
+        onProgress: (progress, received, total) {
+          if (!mounted || !progressDialogOpen) return;
+          updateProgressDialog?.call(() {
+            downloadProgress = progress;
+            receivedBytes = received;
+            totalBytes = total;
+          });
+        },
+      );
+
+      if (mounted && progressDialogOpen) {
+        progressDialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Descarga completada. Confirma la instalación en Android.')),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
+      if (progressDialogOpen) {
+        progressDialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo actualizar: $error')),
       );
