@@ -68,10 +68,123 @@ Deno.serve(async (req: Request) => {
         result_source_names: evaluation?.result_source_names ?? [],
       };
     });
-    const evaluated = forecasts.filter((item: any) => item.evaluated_at != null).length;
-    return json({ ok: true, forecasts, meta: {
+    const evaluatedForecasts = forecasts.filter((item: any) => item.evaluated_at != null && item.actual);
+    const teamStats = new Map<string, any>();
+    const getTeamStats = (teamId: string, team: any) => {
+      if (!teamStats.has(teamId)) {
+        teamStats.set(teamId, {
+          team_id: teamId,
+          team: team?.display_name ?? "Equipo",
+          abbreviation: team?.abbreviation ?? "",
+          games: 0, home_games: 0, away_games: 0,
+          winner_picks_correct: 0,
+          predicted_points_sum: 0, actual_points_sum: 0,
+          points_abs_error_sum: 0, points_signed_error_sum: 0,
+          opponent_points_abs_error_sum: 0,
+          margin_abs_error_sum: 0,
+        });
+      }
+      return teamStats.get(teamId);
+    };
+    for (const item of evaluatedForecasts) {
+      const game: any = gameById.get(item.game_id);
+      const actual: any = item.actual ?? {};
+      const homeId = game?.home_team_id ?? actual.home_team_id;
+      const awayId = game?.away_team_id ?? actual.away_team_id;
+      const homeTeam: any = homeId ? teamById.get(homeId) : null;
+      const awayTeam: any = awayId ? teamById.get(awayId) : null;
+      const actualHome = Number(actual.home_score);
+      const actualAway = Number(actual.away_score);
+      const predictedHome = Number(item.predicted_home_score);
+      const predictedAway = Number(item.predicted_away_score);
+      const homeProbability = Number(item.home_win_probability);
+      if (!homeId || !awayId || ![actualHome, actualAway, predictedHome, predictedAway, homeProbability].every(Number.isFinite)) continue;
+      const actualHomeWon = actualHome > actualAway;
+      const predictedHomeWon = homeProbability >= 50;
+      const marginError = Math.abs((predictedHome - predictedAway) - (actualHome - actualAway));
+      const addTeamSide = (teamId: string, team: any, isHome: boolean) => {
+        const stats = getTeamStats(teamId, team);
+        const predictedFor = isHome ? predictedHome : predictedAway;
+        const actualFor = isHome ? actualHome : actualAway;
+        const predictedAgainst = isHome ? predictedAway : predictedHome;
+        const actualAgainst = isHome ? actualAway : actualHome;
+        const pickedTeamWon = isHome ? predictedHomeWon : !predictedHomeWon;
+        const teamActuallyWon = isHome ? actualHomeWon : !actualHomeWon;
+        stats.games++;
+        if (isHome) stats.home_games++; else stats.away_games++;
+        if (pickedTeamWon === teamActuallyWon) stats.winner_picks_correct++;
+        stats.predicted_points_sum += predictedFor;
+        stats.actual_points_sum += actualFor;
+        stats.points_abs_error_sum += Math.abs(predictedFor - actualFor);
+        stats.points_signed_error_sum += predictedFor - actualFor;
+        stats.opponent_points_abs_error_sum += Math.abs(predictedAgainst - actualAgainst);
+        stats.margin_abs_error_sum += marginError;
+      };
+      addTeamSide(homeId, homeTeam, true);
+      addTeamSide(awayId, awayTeam, false);
+    }
+    const teamAnalysis = [...teamStats.values()].map((stats: any) => ({
+      team_id: stats.team_id,
+      team: stats.team,
+      abbreviation: stats.abbreviation,
+      games_evaluated: stats.games,
+      home_games: stats.home_games,
+      away_games: stats.away_games,
+      winner_accuracy_pct: Number((100 * stats.winner_picks_correct / stats.games).toFixed(1)),
+      mean_predicted_points: Number((stats.predicted_points_sum / stats.games).toFixed(1)),
+      mean_actual_points: Number((stats.actual_points_sum / stats.games).toFixed(1)),
+      points_mae: Number((stats.points_abs_error_sum / stats.games).toFixed(2)),
+      points_bias: Number((stats.points_signed_error_sum / stats.games).toFixed(2)),
+      opponent_points_mae: Number((stats.opponent_points_abs_error_sum / stats.games).toFixed(2)),
+      margin_mae: Number((stats.margin_abs_error_sum / stats.games).toFixed(2)),
+    })).sort((a: any, b: any) => b.games_evaluated - a.games_evaluated || b.points_mae - a.points_mae);
+    // Select the most recent NBA date for which every saved forecast has a final evaluation.
+    const nbaDate = (value: string) => {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+      }).formatToParts(new Date(value));
+      const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+      return `${part("year")}-${part("month")}-${part("day")}`;
+    };
+    const slateGroups = new Map<string, any[]>();
+    for (const item of forecasts) {
+      if (!item.scheduled_start) continue;
+      const date = nbaDate(item.scheduled_start);
+      if (!slateGroups.has(date)) slateGroups.set(date, []);
+      slateGroups.get(date)!.push(item);
+    }
+    const completedSlates = [...slateGroups.entries()]
+      .filter(([, items]) => items.length > 0 && items.every((item: any) => item.evaluated_at != null && item.actual != null))
+      .sort((a, b) => b[0].localeCompare(a[0]));
+    const previousSlateEntry = completedSlates[0] ?? null;
+    const previousSlateGames = previousSlateEntry?.[1] ?? [];
+    const previousSlateCorrect = previousSlateGames.filter((item: any) => item.error_metrics?.winner_correct === true).length;
+    const scoreErrors = previousSlateGames.map((item: any) => {
+      const home = Number(item.error_metrics?.home_score_abs_error);
+      const away = Number(item.error_metrics?.away_score_abs_error);
+      return Number.isFinite(home) && Number.isFinite(away) ? (home + away) / 2 : null;
+    }).filter((value: number | null): value is number => value != null);
+    const marginErrors = previousSlateGames.map((item: any) => Number(item.error_metrics?.margin_abs_error))
+      .filter((value: number) => Number.isFinite(value));
+    const average = (values: number[]) => values.length
+      ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2))
+      : null;
+    const previousSlate = previousSlateEntry ? {
+      date: previousSlateEntry[0],
+      games: previousSlateGames,
+      summary: {
+        total_games: previousSlateGames.length,
+        winner_correct: previousSlateCorrect,
+        winner_accuracy_pct: Number((100 * previousSlateCorrect / previousSlateGames.length).toFixed(1)),
+        average_score_error: average(scoreErrors),
+        average_margin_error: average(marginErrors),
+      },
+    } : null;
+    const evaluated = evaluatedForecasts.length;
+    return json({ ok: true, forecasts, previous_slate: previousSlate, team_analysis: teamAnalysis, meta: {
       total_predictions: forecasts.length, evaluated_predictions: evaluated,
-      pending_evaluations: forecasts.length - evaluated, limit: 100,
+      pending_evaluations: forecasts.length - evaluated, teams_analyzed: teamAnalysis.length,
+      team_analysis_scope: "last_100_forecasts", limit: 100,
     } });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
