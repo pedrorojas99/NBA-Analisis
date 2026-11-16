@@ -668,6 +668,56 @@ class _HomeScreenState extends State<HomeScreen> {
     ],
   );
 
+  Widget _totalScoreDistributionBar() {
+    final evaluated = cloudPredictions.where((p) {
+      final away = p.actual?['away_score'];
+      final home = p.actual?['home_score'];
+      return p.isEvaluated && away is num && home is num;
+    }).toList();
+    if (evaluated.isEmpty) {
+      return Card(margin: const EdgeInsets.only(bottom: 12), child: Padding(
+        padding: const EdgeInsets.all(12), child: Row(children: [
+          const Icon(Icons.insights, color: Color(0xFF1769AA), size: 18),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Marcador total · resultados evaluados', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12))),
+          Text('—', style: Theme.of(context).textTheme.titleMedium),
+        ]),
+      ));
+    }
+    var above = 0; var exact = 0; var below = 0;
+    for (final p in evaluated) {
+      final actualTotal = (p.actual!['away_score'] as num).toDouble() + (p.actual!['home_score'] as num).toDouble();
+      final predictedTotal = (p.predictedAwayScore + p.predictedHomeScore).roundToDouble();
+      if (actualTotal > predictedTotal) { above++; }
+      else if (actualTotal < predictedTotal) { below++; }
+      else { exact++; }
+    }
+    final count = evaluated.length;
+    final abovePct = above * 100 / count; final exactPct = exact * 100 / count; final belowPct = below * 100 / count;
+    const blue = Color(0xFF2388D1); const dark = Color(0xFF252B33); const orange = Color(0xFFEF8A32);
+    Widget legend(Color color, String label, double value) => Expanded(child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 4),
+      Flexible(child: Text('$label ${value.toStringAsFixed(0)}%', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600))),
+    ]));
+    return Card(margin: const EdgeInsets.only(bottom: 12), child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Marcador total · resultados evaluados', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12))),
+          Text('$count partidos', style: const TextStyle(fontSize: 10, color: Color(0xFF718096))),
+        ]),
+        const SizedBox(height: 9),
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: SizedBox(height: 9, child: Row(children: [
+          if (above > 0) Expanded(flex: above, child: Container(color: blue)),
+          if (exact > 0) Expanded(flex: exact, child: Container(color: dark)),
+          if (below > 0) Expanded(flex: below, child: Container(color: orange)),
+        ]))),
+        const SizedBox(height: 8),
+        Row(children: [legend(blue, 'Por encima', abovePct), legend(dark, 'Exacto', exactPct), legend(orange, 'Por debajo', belowPct)]),
+      ]),
+    ));
+  }
   Widget _gamesPage() => RefreshIndicator(
     onRefresh: () async {
       await Future.wait([
@@ -678,6 +728,7 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     child: ListView(padding: const EdgeInsets.all(16), children: [
       _section('Pronósticos automáticos'),
+      _totalScoreDistributionBar(),
       const Text('NBA Analytics consulta el calendario y las estadísticas históricas, calcula los marcadores y guarda cada pronóstico en la nube. No necesitas introducir equipos ni puntos manualmente.'),
       const SizedBox(height: 12),
       _predictionSection(),
@@ -869,9 +920,24 @@ class _HomeScreenState extends State<HomeScreen> {
         .map((p) => (p.errorMetrics!['brier_score'] as num).toDouble())
         .reduce((a, b) => a + b) / cloudDone.length;
     return ListView(padding: const EdgeInsets.all(16), children: [
-      _section('Centro de aprendizaje'),
-      const Text('La nube compara cada pronóstico guardado con el marcador final. Estas métricas evalúan el modelo, pero todavía no cambian sus parámetros automáticamente.'),
-      const SizedBox(height: 12),
+      Card(
+        margin: const EdgeInsets.only(bottom: 14),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(width: 38, height: 38,
+              decoration: BoxDecoration(color: const Color(0xFFEAF2FA), borderRadius: BorderRadius.circular(11)),
+              child: const Icon(Icons.auto_graph, color: Color(0xFF1769AA))),
+            const SizedBox(width: 11),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Centro de aprendizaje', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+              SizedBox(height: 4),
+              Text('Comparamos cada pronóstico con el resultado real y medimos los errores. Los cambios al modelo solo se aplican después de validarlos.',
+                style: TextStyle(fontSize: 12, height: 1.35, color: Color(0xFF667788))),
+            ])),
+          ]),
+        ),
+      ),
       _section('Experimento · promedio histórico + últimos 10'),
       Card(child: Padding(
         padding: const EdgeInsets.all(14),
