@@ -22,7 +22,7 @@ class AppUpdateService {
       'X-GitHub-Api-Version': '2022-11-28',
     }).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
-      throw Exception('GitHub respondió con código \${response.statusCode}.');
+      throw Exception('GitHub respondió con código ${response.statusCode}.');
     }
     final release = jsonDecode(response.body) as Map<String, dynamic>;
     final tag = (release['tag_name'] ?? '').toString();
@@ -58,10 +58,10 @@ class AppUpdateService {
     }
     if (response.statusCode != 200) {
       client.close();
-      throw Exception('No se pudo descargar la APK (HTTP \${response.statusCode}).');
+      throw Exception('No se pudo descargar la APK (HTTP ${response.statusCode}).');
     }
     final directory = await getTemporaryDirectory();
-    final file = File('\${directory.path}/nba-analytics-update.apk');
+    final file = File('${directory.path}/nba-analytics-update.apk');
     final sink = file.openWrite();
     var received = 0;
     final total = response.contentLength ?? 0;
@@ -84,7 +84,7 @@ class AppUpdateService {
     }
     final result = await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
     if (result.type != ResultType.done) {
-      throw Exception('Android no pudo abrir el instalador: \${result.message}');
+      throw Exception('Android no pudo abrir el instalador: ${result.message}');
     }
   }
 }
