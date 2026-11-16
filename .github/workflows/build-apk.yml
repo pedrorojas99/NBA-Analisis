@@ -1,5 +1,8 @@
 name: Build Android APK
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main]
@@ -10,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set unique Android build number
+        run: sed -i "s/^version:.*/version: 0.3.0+${GITHUB_RUN_NUMBER}/" pubspec.yaml
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -35,6 +40,7 @@ jobs:
           </vector>
           EOF
           sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@drawable/ic_launcher"|' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />' android/app/src/main/AndroidManifest.xml
       - run: rm -rf test
       - run: flutter pub get
       - run: flutter analyze lib --no-fatal-infos
@@ -43,3 +49,10 @@ jobs:
         with:
           name: nba-analytics-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Publish APK for in-app updates
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: NBA Analytics build ${{ github.run_number }}
+          make_latest: true
+          files: build/app/outputs/flutter-apk/app-release.apk
