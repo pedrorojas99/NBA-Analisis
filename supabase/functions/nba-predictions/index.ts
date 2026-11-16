@@ -133,6 +133,25 @@ Deno.serve(async (req: Request) => {
     const forecasts: any[] = [];
     const skipped: any[] = [];
     const predictionRows: any[] = [];
+    let slateForecastsReused = 0;
+
+    // Once a slate has started, never recalculate or replace its forecasts.
+    // Return the original stored snapshots so the APK can still display them.
+    if (slateStatus === "in_progress" && persistRequested && modelVersionId && slateGames.length) {
+      const slateGameIds = slateGames.map((game: any) => game.id);
+      const { data: storedSlatePredictions, error: storedSlateError } = await supabase
+        .from("predictions").select("game_id,forecast,created_at")
+        .in("game_id", slateGameIds).eq("model_version_id", modelVersionId)
+        .order("created_at", { ascending: false });
+      if (storedSlateError) throw new Error("Current slate forecast lookup failed: " + storedSlateError.message);
+      const seenGames = new Set<string>();
+      for (const row of storedSlatePredictions ?? []) {
+        if (seenGames.has(row.game_id)) continue;
+        seenGames.add(row.game_id);
+        forecasts.push(row.forecast);
+        slateForecastsReused++;
+      }
+    }
     for (const game of upcomingGames ?? []) {
       const homeHistory = (teamHistory.get(game.home_team_id) ?? []).slice(0, 10);
       const awayHistory = (teamHistory.get(game.away_team_id) ?? []).slice(0, 10);
@@ -285,6 +304,7 @@ Deno.serve(async (req: Request) => {
         slate_date: slateDate,
         slate_status: slateStatus,
         slate_games: slateGames.length,
+        slate_forecasts_reused: slateForecastsReused,
         forecasts_generated: forecasts.length,
         games_skipped: skipped.length,
         persistence_requested: persistRequested,
