@@ -100,16 +100,31 @@ class NbaPredictionHistoryData {
   final int evaluatedCount;
   final int pendingCount;
   final List<NbaTeamErrorSummary> teamAnalysis;
+  final String? previousSlateDate;
+  final List<NbaStoredPrediction> previousSlateGames;
+  final int previousSlateWinnerCorrect;
+  final double? previousSlateWinnerAccuracyPct;
+  final double? previousSlateAverageScoreError;
+  final double? previousSlateAverageMarginError;
 
   const NbaPredictionHistoryData({
     required this.forecasts,
     required this.evaluatedCount,
     required this.pendingCount,
     required this.teamAnalysis,
+    required this.previousSlateDate,
+    required this.previousSlateGames,
+    required this.previousSlateWinnerCorrect,
+    required this.previousSlateWinnerAccuracyPct,
+    required this.previousSlateAverageScoreError,
+    required this.previousSlateAverageMarginError,
   });
 
   factory NbaPredictionHistoryData.fromJson(Map<String, dynamic> json) {
     final meta = Map<String, dynamic>.from(json['meta'] as Map? ?? {});
+    final previousSlate = json['previous_slate'] is Map
+        ? Map<String, dynamic>.from(json['previous_slate'] as Map) : null;
+    final summary = Map<String, dynamic>.from(previousSlate?['summary'] as Map? ?? {});
     return NbaPredictionHistoryData(
       forecasts: (json['forecasts'] as List? ?? [])
           .whereType<Map>()
@@ -121,6 +136,15 @@ class NbaPredictionHistoryData {
           .whereType<Map>()
           .map((row) => NbaTeamErrorSummary.fromJson(Map<String, dynamic>.from(row)))
           .toList(),
+      previousSlateDate: previousSlate?['date']?.toString(),
+      previousSlateGames: (previousSlate?['games'] as List? ?? [])
+          .whereType<Map>()
+          .map((row) => NbaStoredPrediction.fromJson(Map<String, dynamic>.from(row)))
+          .toList(),
+      previousSlateWinnerCorrect: (summary['winner_correct'] as num?)?.toInt() ?? 0,
+      previousSlateWinnerAccuracyPct: (summary['winner_accuracy_pct'] as num?)?.toDouble(),
+      previousSlateAverageScoreError: (summary['average_score_error'] as num?)?.toDouble(),
+      previousSlateAverageMarginError: (summary['average_margin_error'] as num?)?.toDouble(),
     );
   }
 }
