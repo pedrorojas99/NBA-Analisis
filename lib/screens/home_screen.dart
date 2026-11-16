@@ -307,6 +307,54 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  DateTime _localSlateDay(DateTime value) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+
+  String _formatSlateDate(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+
+  Map<DateTime, List<NbaGame>> get _gamesByLocalDate {
+    final grouped = <DateTime, List<NbaGame>>{};
+    for (final game in nbaGames) {
+      grouped.putIfAbsent(_localSlateDay(game.scheduledStart), () => []).add(game);
+    }
+    for (final games in grouped.values) {
+      games.sort((a, b) => a.scheduledStart.compareTo(b.scheduledStart));
+    }
+    return grouped;
+  }
+
+  DateTime? get _latestCompletedSlateDate {
+    final completed = _gamesByLocalDate.entries
+        .where((entry) => entry.value.isNotEmpty &&
+            entry.value.every((game) => game.status == 'final'))
+        .map((entry) => entry.key)
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    return completed.isEmpty ? null : completed.first;
+  }
+
+  List<NbaGame> get _latestCompletedSlateGames {
+    final date = _latestCompletedSlateDate;
+    return date == null ? const [] : (_gamesByLocalDate[date] ?? const []);
+  }
+
+  DateTime? get _nextSlateDate {
+    final dates = _gamesByLocalDate.entries
+        .where((entry) => entry.value.any((game) => game.status != 'final'))
+        .map((entry) => entry.key)
+        .toList()
+      ..sort();
+    return dates.isEmpty ? null : dates.first;
+  }
+
+  List<NbaGame> get _nextSlateGames {
+    final date = _nextSlateDate;
+    return date == null ? const [] : (_gamesByLocalDate[date] ?? const []);
+  }
+
   Widget _liveNbaPage() => RefreshIndicator(
     onRefresh: () async {
       await Future.wait([
@@ -353,7 +401,21 @@ class _HomeScreenState extends State<HomeScreen> {
       )),
       if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
         _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
-      ...nbaGames.map(_nbaGameCard),
+      _section(_latestCompletedSlateDate == null
+          ? 'Resultados de la jornada'
+          : 'Resultados de la jornada · ${_formatSlateDate(_latestCompletedSlateDate!)}'),
+      if (_latestCompletedSlateGames.isEmpty)
+        _empty('Todavía no hay una jornada completamente finalizada en los datos recientes.')
+      else
+        ..._latestCompletedSlateGames.map(_nbaGameCard),
+      const SizedBox(height: 8),
+      _section(_nextSlateDate == null
+          ? 'Próxima jornada'
+          : 'Próxima jornada · ${_formatSlateDate(_nextSlateDate!)}'),
+      if (_nextSlateGames.isEmpty)
+        _empty('No hay partidos programados en la próxima jornada.')
+      else
+        ..._nextSlateGames.map(_nbaGameCard),
       const SizedBox(height: 12),
       _predictionSection(),
       const SizedBox(height: 8),
@@ -555,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(game.scheduledStart.toLocal().toString().substring(0, 16),
+            Text('Hora · ' + game.scheduledStart.toLocal().toString().substring(11, 16),
                 style: Theme.of(context).textTheme.bodySmall),
             Text(statusLabel, style: TextStyle(
               fontWeight: FontWeight.bold,
