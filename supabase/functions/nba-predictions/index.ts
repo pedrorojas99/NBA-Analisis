@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
       .lte("scheduled_start", futureIso)
       .eq("status", "scheduled")
       .order("scheduled_start", { ascending: true })
-      .limit(50);
+      .limit(100);
     if (upcomingError) throw new Error("Upcoming games query failed: " + upcomingError.message);
 
     const teamIds = [...new Set((upcomingGames ?? []).flatMap((game: any) => [game.home_team_id, game.away_team_id]))];
