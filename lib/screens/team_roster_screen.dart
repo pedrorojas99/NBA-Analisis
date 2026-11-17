@@ -71,6 +71,14 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
           ]),
           Text(_lastUpdated(), style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 12),
+          Align(alignment: Alignment.centerLeft, child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(color: const Color(0xFFE8F0FA), borderRadius: BorderRadius.circular(20)),
+            child: const Text('HISTÓRICO DE CARRERA · TODOS LOS EQUIPOS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
+          )),
+          const SizedBox(height: 5),
+          const Text('Promedios de temporada regular durante toda la carrera NBA del jugador, sin importar el equipo.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
+          const SizedBox(height: 12),
           if (loading) const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())),
           if (error != null) Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
             Text(error!, textAlign: TextAlign.center),
@@ -107,7 +115,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('PROMEDIOS POR PARTIDO · TEMPORADA ACTUAL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF667788))),
+                  const Text('PROMEDIOS HISTÓRICOS POR PARTIDO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF667788))),
                   const SizedBox(height: 8),
                   Row(children: [
                     _stat('PTS', _average(p['points_avg'])),
@@ -115,7 +123,7 @@ class _TeamRosterScreenState extends State<TeamRosterScreen> {
                     _stat('3PT', _average(p['threes_avg'])),
                   ]),
                   const SizedBox(height: 6),
-                  Text('${p['games'] ?? 0} partidos con estadísticas', style: const TextStyle(fontSize: 10, color: Color(0xFF667788))),
+                  Text('${p['games'] ?? 0} partidos de temporada regular en su carrera', style: const TextStyle(fontSize: 10, color: Color(0xFF667788))),
                 ])),
               ]),
             ),
