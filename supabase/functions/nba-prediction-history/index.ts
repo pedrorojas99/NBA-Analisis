@@ -189,11 +189,43 @@ Deno.serve(async (req: Request) => {
         average_margin_error: average(marginErrors),
       },
     } : null;
+    const { data: playerPredictionRows, error: playerPredictionsError } = await supabase.from("predictions")
+      .select("id,game_id,created_at,forecast,model_version_id,target_key")
+      .eq("prediction_type", "player").order("created_at", { ascending: false }).limit(500);
+    if (playerPredictionsError) throw new Error("Player prediction history query failed: " + playerPredictionsError.message);
+    const latestPlayerByGameAndTarget = new Map<string, any>();
+    for (const row of playerPredictionRows ?? []) {
+      const key = `${row.game_id}:${row.forecast?.player_id ?? row.target_key}:${row.model_version_id}`;
+      if (!latestPlayerByGameAndTarget.has(key)) latestPlayerByGameAndTarget.set(key, row);
+    }
+    const playerRows = [...latestPlayerByGameAndTarget.values()];
+    const playerPredictionIds = playerRows.map((row: any) => row.id);
+    const { data: playerEvaluationRows, error: playerEvaluationsError } = playerPredictionIds.length
+      ? await supabase.from("prediction_evaluations").select("prediction_id,evaluated_at,actual,error_metrics,result_source_names").in("prediction_id", playerPredictionIds)
+      : { data: [], error: null };
+    if (playerEvaluationsError) throw new Error("Player prediction evaluations query failed: " + playerEvaluationsError.message);
+    const playerEvaluationById = new Map((playerEvaluationRows ?? []).map((item: any) => [item.prediction_id, item]));
+    const playerForecasts = playerRows.map((row: any) => {
+      const forecast: any = row.forecast ?? {};
+      const evaluation: any = playerEvaluationById.get(row.id);
+      return { id: row.id, game_id: row.game_id, created_at: row.created_at,
+        player_id: forecast.player_id ?? row.target_key, player_name: forecast.player_name ?? "Jugador",
+        team_name: forecast.team_name ?? "Equipo", team_abbreviation: forecast.team_abbreviation ?? "",
+        scheduled_start: forecast.scheduled_start ?? null, predicted_points: forecast.predicted_points ?? null,
+        predicted_rebounds: forecast.predicted_rebounds ?? null, predicted_assists: forecast.predicted_assists ?? null,
+        predicted_threes: forecast.predicted_threes ?? null, predicted_minutes: forecast.predicted_minutes ?? null,
+        model_version: forecast.model_version ?? "unknown", evaluated_at: evaluation?.evaluated_at ?? null,
+        actual: evaluation?.actual ?? null, error_metrics: evaluation?.error_metrics ?? null,
+        result_source_names: evaluation?.result_source_names ?? [] };
+    });
+    const evaluatedPlayers = playerForecasts.filter((item: any) => item.evaluated_at != null && item.actual != null).length;
     const evaluated = evaluatedForecasts.length;
-    return json({ ok: true, forecasts, previous_slate: previousSlate, team_analysis: teamAnalysis, meta: {
+    return json({ ok: true, forecasts, player_forecasts: playerForecasts, previous_slate: previousSlate, team_analysis: teamAnalysis, meta: {
       total_predictions: forecasts.length, evaluated_predictions: evaluated,
       pending_evaluations: forecasts.length - evaluated, teams_analyzed: teamAnalysis.length,
       team_analysis_scope: "last_100_forecasts", limit: 100,
+      total_player_predictions: playerForecasts.length, evaluated_player_predictions: evaluatedPlayers,
+      pending_player_evaluations: playerForecasts.length - evaluatedPlayers,
     } });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

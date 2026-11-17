@@ -276,7 +276,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       if (games.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Todavía no hay enfrentamientos registrados entre estos equipos en el historial recopilado.')));
       return ListView(padding: const EdgeInsets.all(12), children: [
         const Text('Últimos enfrentamientos directos finalizados', style: TextStyle(fontWeight: FontWeight.w900)),
-        Text('Se muestran ${games.length} de 5 partidos disponibles en el historial sincronizado.', style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
+        Text('Se muestran ${games.length} de hasta 10 partidos disponibles en el historial sincronizado.', style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
         const SizedBox(height: 8),
         ...games.map((g) => Card(
           color: const Color(0xFFFFF3EA),

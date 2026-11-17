@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/nba_data_service.dart';
@@ -22,11 +23,15 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
   bool loading = true;
   String? predictionError;
   String? statsError;
+  Timer? _liveStatsTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    if (widget.game.status == 'in_progress') {
+      _liveStatsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshLiveStats());
+    }
   }
 
   Future<Map<String, dynamic>?> _loadTeamStats(String? teamId) async {
@@ -84,7 +89,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     final teamStats = (data?['team_stats'] as List? ?? []).whereType<Map>().toList();
     String stat(dynamic row, String key) => '${_flatStats((row as Map)['stats'])[key] ?? '—'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text('RESULTADO Y ESTADÍSTICAS REALES',
+      Padding(padding: const EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text(game.status == 'final' ? 'RESULTADO FINAL Y ESTADÍSTICAS REALES' : 'ESTADÍSTICAS DEL PARTIDO EN VIVO',
         style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF174A7E)))),
       Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
         Text('${game.awayTeam?.name ?? 'Visitante'}  ${game.awayScore ?? '—'} - ${game.homeScore ?? '—'}  ${game.homeTeam?.name ?? 'Local'}',
@@ -110,6 +115,18 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     ]);
   }
 
+  Future<void> _refreshLiveStats() async {
+    try {
+      final actual = await _loadActualGameStats(widget.game.id);
+      if (mounted) setState(() => actualGameStats = actual);
+    } catch (e) {
+      if (mounted) setState(() => statsError = e.toString());
+    }
+  }
+
+  @override
+  void dispose() { _liveStatsTimer?.cancel(); super.dispose(); }
+
   Future<void> _load() async {
     if (mounted) setState(() { loading = true; predictionError = null; statsError = null; });
     try {
@@ -128,7 +145,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     } catch (_) {
       // Keep the game forecast and team metrics visible if player data is unavailable.
     }
-    if (widget.game.status == 'final') {
+    if (widget.game.status == 'final' || widget.game.status == 'in_progress') {
       try {
         final actual = await _loadActualGameStats(widget.game.id);
         if (mounted) setState(() => actualGameStats = actual);
@@ -204,7 +221,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
-                  Text(game.status == 'final' ? 'PARTIDO FINALIZADO · ESTADÍSTICAS REALES' : 'ANÁLISIS PREVIO AL PARTIDO',
+                  Text(game.status == 'final' ? 'PARTIDO FINALIZADO · ESTADÍSTICAS REALES' : game.status == 'in_progress' ? 'EN JUEGO · ACTUALIZACIÓN CADA 30 SEGUNDOS' : 'ANÁLISIS PREVIO AL PARTIDO',
                     style: TextStyle(fontSize: 10, letterSpacing: 1, color: Color(0xFF667788))),
                 ]),
               ),
@@ -238,7 +255,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
                 padding: const EdgeInsets.all(12),
                 child: Text('No se pudieron cargar las estadísticas de equipo: $statsError'),
               )),
-            if (!loading && game.status == 'final') _actualStatsSection(game),
+            if (!loading && (game.status == 'final' || game.status == 'in_progress')) _actualStatsSection(game),
             if (!loading && game.status != 'final') ...[
               _teamStats(game.awayTeam?.name ?? 'Visitante', game.awayTeam?.abbreviation, awayStats),
               _teamStats(game.homeTeam?.name ?? 'Local', game.homeTeam?.abbreviation, homeStats),
