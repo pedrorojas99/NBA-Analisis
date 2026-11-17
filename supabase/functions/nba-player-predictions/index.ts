@@ -68,8 +68,7 @@ function extractAvailability(summary: any, expectedEspnTeamIds: string[], localT
   const injuryReportComplete = injuryReportAvailable &&
     expectedEspnTeamIds.every((id) => reportedTeams.has(id));
 
-  // ESPN sometimes omits the injury report even when its active starting lineup is present.
-  // Keep confirmed active starters in that case, but explicitly mark availability as unverified.
+  // Use this endpoint only for injury exclusions; player candidates come from validated historical appearances.
   const injuredIds = new Set<string>();
   for (const group of injuryGroups ?? []) {
     for (const injury of group?.injuries ?? []) {
@@ -267,9 +266,6 @@ Deno.serve(async (req: Request) => {
       if (playerRowsError) throw new Error("Historical player catalog lookup failed: " + playerRowsError.message);
       if (playerMapError) throw new Error("Historical ESPN player mappings failed: " + playerMapError.message);
       for (const mapping of playerMappings ?? []) localPlayerByEspn.set(String(mapping.source_player_id), mapping.player_id);
-      for (const mapping of playerMappings ?? []) {
-        if (!localPlayerByEspn.has(String(mapping.source_player_id))) localPlayerByEspn.set(String(mapping.source_player_id), mapping.player_id);
-      }
       for (const player of playerRows ?? []) playerById.set(player.id, player);
       const espnByLocalPlayer = new Map((playerMappings ?? []).map((m: any) => [m.player_id, String(m.source_player_id)]));
       for (const game of slateGames) {
