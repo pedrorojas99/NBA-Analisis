@@ -79,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool playerPredictionLoading = true;
   String? playerPredictionError;
   List<NbaStoredPrediction> cloudPredictions = [];
+  List<NbaStoredPlayerPrediction> cloudPlayerPredictions = [];
   bool cloudHistoryLoading = true;
   String? cloudHistoryError;
   int cloudEvaluatedCount = 0;
@@ -248,6 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() {
         cloudPredictions = data.forecasts;
+        cloudPlayerPredictions = data.playerForecasts;
         cloudEvaluatedCount = data.evaluatedCount;
         cloudPendingCount = data.pendingCount;
         cloudTeamAnalysis = data.teamAnalysis;
@@ -559,18 +561,18 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: (isPending || isFinal) ? () => _openGameAnalysis(game) : null,
+        onTap: (isPending || isFinal || isLive) ? () => _openGameAnalysis(game) : null,
         child: Padding(padding: const EdgeInsets.all(12), child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text('Hora · ' + game.scheduledStart.toLocal().toString().substring(11, 16),
                   style: Theme.of(context).textTheme.bodySmall),
-              if (isPending || isFinal)
+              if (isPending || isFinal || isLive)
                 TextButton.icon(
                   onPressed: () => _openGameAnalysis(game),
                   icon: const Icon(Icons.analytics_outlined, size: 16),
-                  label: Text(isFinal ? 'VER ESTADÍSTICAS' : 'ANALIZAR', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  label: Text(isFinal ? 'VER ESTADÍSTICAS' : isLive ? 'ESTADÍSTICAS EN VIVO' : 'ANALIZAR', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     minimumSize: Size.zero,
@@ -847,141 +849,85 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _learningPage() {
-    final done = predictions.where((p) => p.isSettled).toList();
-    final correct = done.where((p) => p.predictedWinner == p.actualWinner).length;
-    final avgError = done.isEmpty ? null : done.map((p) =>
-      ((p.homeScore - p.actualHomeScore!).abs() + (p.awayScore - p.actualAwayScore!).abs()) / 2
-    ).reduce((a,b) => a+b) / done.length;
-    final accuracy = done.isEmpty ? null : 100 * correct / done.length;
-    final versions = done.map((p) => p.modelVersion).toSet().toList()..sort();
     final cloudDone = cloudPredictions.where((p) => p.isEvaluated).toList();
-    final cloudCorrect = cloudDone.where((p) => p.errorMetrics!['winner_correct'] == true).length;
+    final cloudCorrect = cloudDone.where((p) => p.errorMetrics?['winner_correct'] == true).length;
     final cloudAccuracy = cloudDone.isEmpty ? null : 100 * cloudCorrect / cloudDone.length;
-    final cloudMarginError = cloudDone.isEmpty ? null : cloudDone
-        .map((p) => (p.errorMetrics!['margin_abs_error'] as num).toDouble())
-        .reduce((a, b) => a + b) / cloudDone.length;
-    final cloudBrier = cloudDone.isEmpty ? null : cloudDone
-        .map((p) => (p.errorMetrics!['brier_score'] as num).toDouble())
-        .reduce((a, b) => a + b) / cloudDone.length;
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      Card(
-        margin: const EdgeInsets.only(bottom: 14),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(width: 38, height: 38,
-              decoration: BoxDecoration(color: const Color(0xFFEAF2FA), borderRadius: BorderRadius.circular(11)),
-              child: const Icon(Icons.auto_graph, color: Color(0xFF1769AA))),
-            const SizedBox(width: 11),
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Centro de aprendizaje', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-              SizedBox(height: 4),
-              Text('Comparamos cada pronóstico con el resultado real y medimos los errores. Los cambios al modelo solo se aplican después de validarlos.',
-                style: TextStyle(fontSize: 12, height: 1.35, color: Color(0xFF667788))),
-            ])),
-          ]),
-        ),
-      ),
-      _section('Experimento · promedio histórico + últimos 10'),
-      Card(child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Candidato historical-blend-0.1',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          const SizedBox(height: 6),
-          const Text('Combina al 50 % el promedio histórico de puntos anotados y permitidos con el promedio de los últimos 10 partidos. Prueba walk-forward inicial: 189 partidos, sin utilizar resultados futuros.'),
-          const SizedBox(height: 12),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1),
-            },
-            children: const [
-              TableRow(children: [
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Métrica', style: TextStyle(fontWeight: FontWeight.bold))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Actual', textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold))),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Candidato', textAlign: TextAlign.end, style: TextStyle(fontWeight: FontWeight.bold))),
-              ]),
-              TableRow(children: [
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Acierto ganador')),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('67,72 %', textAlign: TextAlign.end)),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('67,72 %', textAlign: TextAlign.end)),
-              ]),
-              TableRow(children: [
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Error total')),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('16,11 pts', textAlign: TextAlign.end)),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('16,06 pts', textAlign: TextAlign.end)),
-              ]),
-              TableRow(children: [
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Error de margen')),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('9,49 pts', textAlign: TextAlign.end)),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('9,45 pts', textAlign: TextAlign.end)),
-              ]),
-              TableRow(children: [
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('Brier score')),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('0,2041', textAlign: TextAlign.end)),
-                Padding(padding: EdgeInsets.symmetric(vertical: 5), child: Text('0,2032', textAlign: TextAlign.end)),
-              ]),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text('Estado: candidato no promovido. La mejora es mínima y el promedio histórico por sí solo rindió ligeramente mejor. Mantendremos el motor actual hasta reunir más partidos.',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-        ]),
-      )),
-      const SizedBox(height: 12),
-      _section('Evaluación automática en la nube'),
-      Row(children: [
-        Expanded(child: _metric('Pronósticos', '${cloudPredictions.length}')),
-        const SizedBox(width: 8),
-        Expanded(child: _metric('Evaluados', '$cloudEvaluatedCount')),
-        const SizedBox(width: 8),
-        Expanded(child: _metric('Pendientes', '$cloudPendingCount')),
-      ]),
-      const SizedBox(height: 8),
-      Row(children: [
-        Expanded(child: _metric('Acierto ganador', cloudAccuracy == null ? '—' : '${cloudAccuracy.toStringAsFixed(1)}%')),
-        const SizedBox(width: 8),
-        Expanded(child: _metric('Error de margen', cloudMarginError == null ? '—' : '${cloudMarginError.toStringAsFixed(1)} pts')),
-        const SizedBox(width: 8),
-        Expanded(child: _metric('Brier score', cloudBrier == null ? '—' : cloudBrier.toStringAsFixed(3))),
-      ]),
-      const SizedBox(height: 16),
-      _section('Errores por equipo · pronósticos automáticos'),
-      const Text('El error de puntos mide cuánto se desvía el marcador previsto de cada equipo. El sesgo positivo indica que el modelo suele pronosticarle más puntos de los que anota; el negativo indica lo contrario.'),
-      if (cloudTeamAnalysis.isEmpty)
-        _empty('Todavía no hay pronósticos automáticos evaluados para comparar equipos. Esta sección se llenará después de que terminen las próximas jornadas.')
-      else
-        ...cloudTeamAnalysis.take(30).map(_teamErrorCard),
-      const SizedBox(height: 16),
-      Row(children: [
-        Expanded(child: _metric('Partidos evaluados', '${done.length}')),
-        const SizedBox(width: 10),
-        Expanded(child: _metric('Acierto ganador', accuracy == null ? '—' : '${accuracy.toStringAsFixed(1)}%')),
-      ]),
-      const SizedBox(height: 10),
-      _metric('Error medio por equipo', avgError == null ? '—' : '${avgError.toStringAsFixed(1)} puntos'),
-      const SizedBox(height: 18),
-      _section('Versiones del modelo'),
-      if (versions.isEmpty) _empty('La primera versión se registrará al guardar un pronóstico.')
-      else ...versions.map((v) {
-        final subset = done.where((p) => p.modelVersion == v).toList();
-        final hits = subset.where((p) => p.predictedWinner == p.actualWinner).length;
-        return Card(child: ListTile(
-          title: Text(v), subtitle: Text('${subset.length} partidos evaluados · ${subset.isEmpty ? 0 : (100*hits/subset.length).toStringAsFixed(1)}% de acierto'),
-        ));
-      }),
-      const SizedBox(height: 12),
-      Card(color: const Color(0xFFFFF0E5), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xFFE8C9B8))),
-        child: const Padding(padding: EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('LABORATORIO DE APRENDIZAJE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B))),
-          SizedBox(height: 8), Text('La APK registra predicciones, espera resultados finales, calcula errores de marcador y ganador, y compara versiones del modelo con datos históricos.'),
-          SizedBox(height: 8), Text('No se activa una mejora automáticamente si no demuestra resultados consistentes en evaluaciones temporales.', style: TextStyle(fontWeight: FontWeight.w700)),
+    final cloudMarginError = cloudDone.isEmpty ? null : cloudDone.map((p) => (p.errorMetrics?['margin_abs_error'] as num?)?.toDouble() ?? 0).reduce((a,b) => a+b) / cloudDone.length;
+    final cloudBrier = cloudDone.isEmpty ? null : cloudDone.map((p) => (p.errorMetrics?['brier_score'] as num?)?.toDouble() ?? 0).reduce((a,b) => a+b) / cloudDone.length;
+    final playerDone = cloudPlayerPredictions.where((p) => p.isEvaluated).toList();
+    double? playerMae(String key) {
+      final values = playerDone.map((p) => (p.errorMetrics?[key] as num?)?.toDouble()).whereType<double>().toList();
+      return values.isEmpty ? null : values.reduce((a,b) => a+b) / values.length;
+    }
+    final overErrors = <double>[], underErrors = <double>[];
+    for (final p in cloudDone) {
+      final actual = p.actual ?? {};
+      final pairs = [(p.predictedHomeScore, (actual['home_score'] as num?)?.toDouble()), (p.predictedAwayScore, (actual['away_score'] as num?)?.toDouble())];
+      for (final pair in pairs) {
+        final real = pair.$2; if (real == null) continue;
+        final delta = pair.$1 - real;
+        if (delta > 0) overErrors.add(delta);
+        if (delta < 0) underErrors.add(-delta);
+      }
+    }
+    double? mean(List<double> values) => values.isEmpty ? null : values.reduce((a,b) => a+b) / values.length;
+    final versions = cloudDone.map((p) => p.modelVersion).toSet().toList()..sort();
+    return RefreshIndicator(onRefresh: () async { await refreshPredictions(); await refreshPlayerPredictions(); },
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(color: const Color(0xFFFFF0E5), child: const Padding(padding: EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('CENTRO DE APRENDIZAJE · EVALUACIÓN AUTOMÁTICA EN LA NUBE', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFB94D2B), fontSize: 17)),
+          SizedBox(height: 6), Text('Las predicciones originales se conservan. El sistema compara los resultados finales y registra los errores antes de evaluar cambios de modelo.'),
         ]))),
-      const SizedBox(height: 12),
-      const Text('Próxima etapa: ampliar el historial validado, comparar nuevos candidatos mediante pruebas temporales y promover un modelo solo cuando demuestre una mejora consistente.'),
-    ]);
+        if (cloudHistoryLoading) const LinearProgressIndicator(),
+        if (cloudHistoryError != null) _empty('No se pudo cargar la evaluación: $cloudHistoryError'),
+        Card(child: ExpansionTile(initiallyExpanded: true, leading: const Icon(Icons.groups, color: Color(0xFF3F4852)),
+          title: const Text('Equipos', style: TextStyle(fontWeight: FontWeight.w900)), subtitle: const Text('Indicadores de predicciones colectivas'),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 14), children: [
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              SizedBox(width: 145, child: _metric('Predicciones', '${cloudPredictions.length}')),
+              SizedBox(width: 145, child: _metric('Evaluados', '$cloudEvaluatedCount')),
+              SizedBox(width: 145, child: _metric('Pendientes', '$cloudPendingCount')),
+              SizedBox(width: 145, child: _metric('Acierto del ganador', cloudAccuracy == null ? '—' : '${cloudAccuracy.toStringAsFixed(1)}%')),
+              SizedBox(width: 145, child: _metric('Error de margen', cloudMarginError == null ? '—' : '${cloudMarginError.toStringAsFixed(2)} pts')),
+              SizedBox(width: 145, child: _metric('Brier score', cloudBrier == null ? '—' : cloudBrier.toStringAsFixed(3))),
+            ]),
+            const SizedBox(height: 8), _section('Error medio del marcador'),
+            Row(children: [Expanded(child: _metric('Real menor que predicho', mean(overErrors) == null ? '—' : '${mean(overErrors)!.toStringAsFixed(1)} pts')), const SizedBox(width: 8), Expanded(child: _metric('Real mayor que predicho', mean(underErrors) == null ? '—' : '${mean(underErrors)!.toStringAsFixed(1)} pts'))]),
+            const SizedBox(height: 8), _section('Evaluación por equipo'),
+            if (cloudTeamAnalysis.isEmpty) _empty('Aún no hay suficientes evaluaciones de equipos.') else ...cloudTeamAnalysis.take(30).map(_teamErrorCard),
+          ])),
+        Card(child: ExpansionTile(leading: const Icon(Icons.person, color: Color(0xFFE8752E)),
+          title: const Text('Jugadores', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFE8752E))), subtitle: const Text('Errores de las proyecciones individuales'),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 14), children: [
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              SizedBox(width: 145, child: _metric('Predicciones', '${cloudPlayerPredictions.length}')),
+              SizedBox(width: 145, child: _metric('Evaluados', '${playerDone.length}')),
+              SizedBox(width: 145, child: _metric('Pendientes', '${cloudPlayerPredictions.length - playerDone.length}')),
+              SizedBox(width: 145, child: _metric('Acierto del ganador', 'No aplica')),
+              SizedBox(width: 145, child: _metric('Error medio PTS', playerMae('points_abs_error') == null ? '—' : playerMae('points_abs_error')!.toStringAsFixed(1))),
+              SizedBox(width: 145, child: _metric('Error medio REB', playerMae('rebounds_abs_error') == null ? '—' : playerMae('rebounds_abs_error')!.toStringAsFixed(1))),
+              SizedBox(width: 145, child: _metric('Error medio 3PT', playerMae('threes_abs_error') == null ? '—' : playerMae('threes_abs_error')!.toStringAsFixed(1))),
+            ]),
+            const SizedBox(height: 6), const Text('En predicciones individuales no existe un ganador de partido que evaluar; por eso ese indicador se marca como no aplicable. Los errores son la diferencia absoluta media frente al boxscore final.'),
+            const SizedBox(height: 8),
+            if (playerDone.isEmpty) _empty('Las evaluaciones individuales aparecerán cuando existan predicciones guardadas y boxscores finales verificados.')
+            else ...playerDone.take(30).map((p) => Card(margin: const EdgeInsets.only(bottom: 6), child: ListTile(title: Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE8752E))), subtitle: Text('${p.teamAbbreviation} · ${p.modelVersion}'), trailing: Text('PTS ±${(p.errorMetrics?['points_abs_error'] as num?)?.toStringAsFixed(1) ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w800))))),
+          ])),
+        Card(color: const Color(0xFFFFF0E5), child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('LABORATORIO DE APRENDIZAJE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFFB94D2B))),
+          const SizedBox(height: 8), Text('Pronósticos colectivos: ${cloudPredictions.length}. Evaluados: $cloudEvaluatedCount. Pendientes: $cloudPendingCount.'),
+          Text('Pronósticos individuales: ${cloudPlayerPredictions.length}. Evaluados: ${playerDone.length}. Pendientes: ${cloudPlayerPredictions.length - playerDone.length}.'),
+          const SizedBox(height: 8), const Text('Versiones evaluadas', style: TextStyle(fontWeight: FontWeight.bold)),
+          if (versions.isEmpty) const Text('Todavía no hay versiones con resultados finales.') else ...versions.map((v) {
+            final subset = cloudDone.where((p) => p.modelVersion == v).toList();
+            final hits = subset.where((p) => p.errorMetrics?['winner_correct'] == true).length;
+            return Text('$v · ${subset.length} partidos · ${subset.isEmpty ? '—' : (100*hits/subset.length).toStringAsFixed(1)}% acierto');
+          }),
+          const SizedBox(height: 8), const Text('No se promueve automáticamente una versión por una mejora pequeña: se exige evaluación temporal y evidencia consistente.'),
+        ]))),
+      ]),
+    );
   }
-
   Widget _section(String t) => Padding(
     padding: const EdgeInsets.only(bottom: 10),
     child: Text(t, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
