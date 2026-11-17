@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/nba_data_service.dart';
 import '../services/nba_player_prediction_service.dart';
 import '../services/nba_prediction_service.dart';
+import 'team_roster_screen.dart';
 
 class MatchupPredictionCard extends StatefulWidget {
   final NbaForecast forecast;
@@ -58,6 +59,26 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
   }
 
   double _impact(NbaPlayerForecast p) => p.points + p.rebounds * 1.2 + p.assists * 1.5;
+
+  void _openRoster(NbaTeam? team) {
+    if (team == null) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TeamRosterScreen(
+        teamId: team.id,
+        teamName: team.name,
+        abbreviation: team.abbreviation,
+      ),
+    ));
+  }
+
+  Widget _teamLogoButton(NbaTeam? team) => InkWell(
+    onTap: () => _openRoster(team),
+    borderRadius: BorderRadius.circular(28),
+    child: Padding(
+      padding: const EdgeInsets.all(4),
+      child: _teamLogo(team?.abbreviation),
+    ),
+  );
 
   Widget _teamLogo(String? abbreviation) {
     final raw = (abbreviation ?? '').toUpperCase();
@@ -178,14 +199,14 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     return Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Column(children: [
-          _teamLogo(widget.awayTeam?.abbreviation),
+          _teamLogoButton(widget.awayTeam),
           Text(f.awayTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(f.predictedAwayScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
           Text('${f.awayWinProbability.toStringAsFixed(1)}% prob.', style: const TextStyle(fontSize: 12)),
         ])),
         const Text('VS', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFEF6C35))),
         Expanded(child: Column(children: [
-          _teamLogo(widget.homeTeam?.abbreviation),
+          _teamLogoButton(widget.homeTeam),
           Text(f.homeTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(f.predictedHomeScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
           Text('${f.homeWinProbability.toStringAsFixed(1)}% prob.', style: const TextStyle(fontSize: 12)),
