@@ -532,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
           homeTeam: game?.homeTeam,
           awayTeam: game?.awayTeam,
           players: players,
-          showHeadToHead: false,
+          showHeadToHead: true,
         );
       }),
       if (playerPredictionLoading)
@@ -766,6 +766,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _directionalScoreErrorSummary() {
+    final tooHigh = <double>[], tooLow = <double>[];
+    for (final p in cloudPredictions.where((item) => item.isEvaluated)) {
+      final actual = p.actual ?? {};
+      final pairs = [(p.predictedHomeScore, (actual['home_score'] as num?)?.toDouble()), (p.predictedAwayScore, (actual['away_score'] as num?)?.toDouble())];
+      for (final pair in pairs) {
+        final real = pair.$2; if (real == null) continue;
+        final difference = pair.$1 - real;
+        if (difference > 0) tooHigh.add(difference);
+        if (difference < 0) tooLow.add(-difference);
+      }
+    }
+    double? avg(List<double> values) => values.isEmpty ? null : values.reduce((a,b) => a+b) / values.length;
+    final high = avg(tooHigh), low = avg(tooLow);
+    return Row(children: [
+      Expanded(child: _metric('Error medio · real menor que predicho', high == null ? '—' : '${high.toStringAsFixed(1)} pts')),
+      const SizedBox(width: 8),
+      Expanded(child: _metric('Error medio · real mayor que predicho', low == null ? '—' : '${low.toStringAsFixed(1)} pts')),
+    ]);
+  }
   Widget _historyPage() => RefreshIndicator(
     onRefresh: refreshCloudHistory,
     child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -775,6 +795,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Text('RESUMEN DE HISTORIAL DE PREDICCIONES', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B)))),
       const SizedBox(height: 10),
       _section('Historial automático en la nube'),
+      _directionalScoreErrorSummary(),
+      const SizedBox(height: 8),
       const Text('Los pronósticos guardados por el motor se conservan con su versión y datos de entrada. Cuando llega el resultado final, se calcula su error sin modificar el pronóstico original.'),
       const SizedBox(height: 8),
       Row(children: [
