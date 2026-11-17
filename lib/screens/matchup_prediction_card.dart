@@ -196,7 +196,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       _teamStatsComparison(),
       const Divider(height: 20),
       const Text('Pronósticos individuales', style: TextStyle(fontWeight: FontWeight.w900)),
-      const Text('Se muestran titulares activos confirmados por ESPN. Si el informe de lesiones no está completo, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
+      const Text('Se muestran los dos jugadores de mayor impacto de cada equipo, según sus estadísticas recientes. Los jugadores con estado Out, Doubtful o Questionable se excluyen; si el informe de lesiones está incompleto, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
       _playerGroup(f.awayTeam, widget.awayTeam?.abbreviation ?? ''),
       _playerGroup(f.homeTeam, widget.homeTeam?.abbreviation ?? ''),
     ]));
