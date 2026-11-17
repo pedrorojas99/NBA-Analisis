@@ -95,8 +95,27 @@ class NbaTeamErrorSummary {
   );
 }
 
+class NbaStoredPlayerPrediction {
+  final String id, gameId, playerId, playerName, teamName, teamAbbreviation, modelVersion;
+  final Map<String, dynamic>? actual, errorMetrics;
+  final bool isEvaluated;
+  const NbaStoredPlayerPrediction({required this.id, required this.gameId, required this.playerId,
+    required this.playerName, required this.teamName, required this.teamAbbreviation,
+    required this.modelVersion, required this.actual, required this.errorMetrics, required this.isEvaluated});
+  factory NbaStoredPlayerPrediction.fromJson(Map<String, dynamic> j) {
+    final a = j['actual'], e = j['error_metrics'];
+    return NbaStoredPlayerPrediction(id: '${j['id'] ?? ''}', gameId: '${j['game_id'] ?? ''}',
+      playerId: '${j['player_id'] ?? ''}', playerName: '${j['player_name'] ?? 'Jugador'}',
+      teamName: '${j['team_name'] ?? 'Equipo'}', teamAbbreviation: '${j['team_abbreviation'] ?? ''}',
+      modelVersion: '${j['model_version'] ?? 'unknown'}',
+      actual: a is Map ? Map<String,dynamic>.from(a) : null,
+      errorMetrics: e is Map ? Map<String,dynamic>.from(e) : null,
+      isEvaluated: j['evaluated_at'] != null && a is Map);
+  }
+}
 class NbaPredictionHistoryData {
   final List<NbaStoredPrediction> forecasts;
+  final List<NbaStoredPlayerPrediction> playerForecasts;
   final int evaluatedCount;
   final int pendingCount;
   final List<NbaTeamErrorSummary> teamAnalysis;
@@ -109,6 +128,7 @@ class NbaPredictionHistoryData {
 
   const NbaPredictionHistoryData({
     required this.forecasts,
+    required this.playerForecasts,
     required this.evaluatedCount,
     required this.pendingCount,
     required this.teamAnalysis,
@@ -129,6 +149,10 @@ class NbaPredictionHistoryData {
       forecasts: (json['forecasts'] as List? ?? [])
           .whereType<Map>()
           .map((row) => NbaStoredPrediction.fromJson(Map<String, dynamic>.from(row)))
+          .toList(),
+      playerForecasts: (json['player_forecasts'] as List? ?? [])
+          .whereType<Map>()
+          .map((row) => NbaStoredPlayerPrediction.fromJson(Map<String,dynamic>.from(row)))
           .toList(),
       evaluatedCount: (meta['evaluated_predictions'] as num?)?.toInt() ?? 0,
       pendingCount: (meta['pending_evaluations'] as num?)?.toInt() ?? 0,
