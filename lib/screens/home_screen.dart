@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/nba_data_service.dart';
 import '../models/prediction.dart';
@@ -94,9 +95,42 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Prediction> predictions = [];
   bool loading = true;
   bool showPreviousResults = false;
+  Timer? _liveScoreTimer;
+  bool _liveScoreRefreshInFlight = false;
 
   @override
-  void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }
+  void initState() {
+    super.initState();
+    refresh();
+    refreshNbaData();
+    refreshPredictions();
+    refreshPlayerPredictions();
+    _liveScoreTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshLiveScores());
+  }
+
+  Future<void> _refreshLiveScores() async {
+    if (!mounted || tab != 0 || _liveScoreRefreshInFlight) return;
+    _liveScoreRefreshInFlight = true;
+    try {
+      final data = await nbaService.loadLiveScores();
+      if (!mounted) return;
+      setState(() {
+        nbaGames = data.games;
+        nbaUpdatedAt = data.updatedAt;
+        nbaMeta = data.meta;
+      });
+    } catch (_) {
+      // Keep the last confirmed scoreboard visible if a short poll fails.
+    } finally {
+      _liveScoreRefreshInFlight = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveScoreTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _checkForAppUpdate() async {
     ScaffoldMessenger.of(context).showSnackBar(
