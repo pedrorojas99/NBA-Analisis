@@ -78,44 +78,18 @@ function extractAvailability(summary: any, expectedEspnTeamIds: string[], localT
     }
   }
 
-  const players = summary?.boxscore?.players;
-  if (!Array.isArray(players)) return {
-    verified: false, candidates: [],
-    reason: !injuryReportAvailable ? "injury_report_unavailable_and_lineups_unavailable"
-      : !injuryReportComplete ? "injury_report_incomplete_and_lineups_unavailable"
-      : "starting_lineups_unavailable"
-  };
-  const byPlayer = new Map<string, any>();
-  for (const teamGroup of players) {
-    const espnTeamId = String(teamGroup?.team?.id ?? "");
-    const localTeamId = localTeamByEspn.get(espnTeamId);
-    if (!localTeamId) continue;
-    for (const category of teamGroup?.statistics ?? []) {
-      for (const item of category?.athletes ?? []) {
-        const entry = item?.athlete ?? item ?? {};
-        const athlete = entry?.athlete ?? entry;
-        const playerId = String(athlete?.id ?? entry?.id ?? "");
-        if (!playerId || entry?.didNotPlay === true) continue;
-        if (injuredIds.has(playerId)) continue;
-        byPlayer.set(playerId, {
-          espn_player_id: playerId,
-          team_id: localTeamId,
-          player_name: athlete?.displayName ?? athlete?.fullName ?? entry?.displayName ?? "Jugador",
-          position: athlete?.position?.abbreviation ?? athlete?.position?.displayName ?? null,
-          starter_confirmed: entry?.starter === true,
-          injury_clear: injuryReportComplete,
-        });
-      }
-    }
-  }
   return {
     verified: injuryReportComplete,
-    candidates: [...byPlayer.values()],
-    reason: byPlayer.size
-      ? (injuryReportComplete ? null : (!injuryReportAvailable ? "injury_report_unavailable" : "injury_report_incomplete"))
-      : "no_confirmed_active_starters"
+    candidates: [],
+    injured_ids: [...injuredIds],
+    reason: !injuryReportAvailable
+      ? "injury_report_unavailable"
+      : !injuryReportComplete
+      ? "injury_report_incomplete"
+      : injuredIds.size ? "injury_report_loaded" : null
   };
 }
+
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, error: "Use POST" }, 405);
@@ -228,22 +202,10 @@ Deno.serve(async (req: Request) => {
       }
 
       const activeModelId = modelVersionId ?? modelRows?.[0]?.id;
-      const candidates = slateGames.flatMap((game: any) =>
-        (availabilityByGame.get(game.id)?.candidates ?? []).map((p: any) => ({ ...p, game_id: game.id, scheduled_start: game.scheduled_start }))
-      );
-      const candidateEspnIds = [...new Set(candidates.map((p: any) => p.espn_player_id))];
-      const { data: playerMappings, error: playerMapError } = candidateEspnIds.length
-        ? await supabase.from("player_source_ids").select("player_id,source_player_id")
-            .eq("source_name", "espn").in("source_player_id", candidateEspnIds)
-        : { data: [], error: null };
-      if (playerMapError) throw new Error("ESPN player mappings failed: " + playerMapError.message);
-      const localPlayerByEspn = new Map((playerMappings ?? []).map((m: any) => [String(m.source_player_id), m.player_id]));
-      const localPlayerIds = [...new Set((playerMappings ?? []).map((m: any) => m.player_id))];
-      const { data: playerRows, error: playerRowsError } = localPlayerIds.length
-        ? await supabase.from("players").select("id,display_name,position,active").in("id", localPlayerIds)
-        : { data: [], error: null };
-      if (playerRowsError) throw new Error("Player records lookup failed: " + playerRowsError.message);
-      const playerById = new Map((playerRows ?? []).map((p: any) => [p.id, p]));
+      const candidates: any[] = [];
+      const localPlayerByEspn = new Map<string, string>();
+      const playerById = new Map<string, any>();
+
 
       const statRows: any[] = [];
       const pageSize = 1000;
@@ -290,6 +252,55 @@ Deno.serve(async (req: Request) => {
         historyByPlayer.get(row.player_id)!.push({ ...normalized, game_id: row.game_id, team_id: row.team_id, date: Date.parse(game.scheduled_start) });
       }
       for (const rows of historyByPlayer.values()) rows.sort((a, b) => b.date - a.date);
+      // Build the eligible roster from players with recent validated appearances for each team.
+      // This avoids requiring ESPN to publish a confirmed starting lineup before forecasts can exist.
+      const historyPlayerIds = [...historyByPlayer.keys()];
+      const [{ data: playerRows, error: playerRowsError }, { data: playerMappings, error: playerMapError }] = await Promise.all([
+        historyPlayerIds.length
+          ? supabase.from("players").select("id,display_name,position,active").in("id", historyPlayerIds)
+          : Promise.resolve({ data: [], error: null }),
+        historyPlayerIds.length
+          ? supabase.from("player_source_ids").select("player_id,source_player_id")
+              .eq("source_name", "espn").in("player_id", historyPlayerIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (playerRowsError) throw new Error("Historical player catalog lookup failed: " + playerRowsError.message);
+      if (playerMapError) throw new Error("Historical ESPN player mappings failed: " + playerMapError.message);
+      for (const mapping of playerMappings ?? []) localPlayerByEspn.set(String(mapping.source_player_id), mapping.player_id);
+      for (const mapping of playerMappings ?? []) {
+        if (!localPlayerByEspn.has(String(mapping.source_player_id))) localPlayerByEspn.set(String(mapping.source_player_id), mapping.player_id);
+      }
+      for (const player of playerRows ?? []) playerById.set(player.id, player);
+      const espnByLocalPlayer = new Map((playerMappings ?? []).map((m: any) => [m.player_id, String(m.source_player_id)]));
+      for (const game of slateGames) {
+        const availability = availabilityByGame.get(game.id);
+        const injuredIds = new Set<string>(availability?.injured_ids ?? []);
+        for (const teamId of [game.home_team_id, game.away_team_id]) {
+          for (const player of playerRows ?? []) {
+            if (player.active !== true) continue;
+            const history = historyByPlayer.get(player.id) ?? [];
+            const teamHistory = history.filter((row: any) => row.team_id === teamId);
+            if (teamHistory.length < 3 || history.length === 0 || history[0].team_id !== teamId) continue;
+            const espnPlayerId = espnByLocalPlayer.get(player.id);
+            if (!espnPlayerId) continue;
+            if (injuredIds.has(espnPlayerId)) {
+              skipped.push({ game_id: game.id, player: player.display_name, reason: "injury_report_excluded" });
+              continue;
+            }
+            candidates.push({
+              game_id: game.id,
+              scheduled_start: game.scheduled_start,
+              espn_player_id: espnPlayerId,
+              team_id: teamId,
+              player_name: player.display_name ?? "Jugador",
+              position: player.position ?? null,
+              starter_confirmed: false,
+              injury_clear: availability?.verified === true,
+            });
+          }
+        }
+      }
+
 
       const existingByKey = new Map<string, any>();
       for (let offset = 0; offset < gameIds.length; offset += 100) {
@@ -327,7 +338,7 @@ Deno.serve(async (req: Request) => {
           position: player.position ?? candidate.position,
           starter_confirmed: candidate.starter_confirmed === true,
           injury_clear: candidate.injury_clear === true,
-          availability_source: candidate.injury_clear === true ? "ESPN lineup and complete injury report" : "ESPN active lineup; injury report incomplete",
+          availability_source: candidate.injury_clear === true ? "ESPN injury report complete" : "ESPN injury report incomplete",
           availability_checked_at: nowIso,
           predicted_points: project("points"),
           predicted_rebounds: project("rebounds"),
