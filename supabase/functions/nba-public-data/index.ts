@@ -156,8 +156,8 @@ Deno.serve(async (req: Request) => {
           home_score: homeScore, away_score: awayScore,
           winner: homeScore > awayScore ? (home?.display_name ?? "Local") : (away?.display_name ?? "Visitante")
         }];
-      }).slice(0, 5);
-      return json({ ok: true, games: meetings, meta: { returned: meetings.length, requested: 5 } });
+      }).slice(0, 10);
+      return json({ ok: true, games: meetings, meta: { returned: meetings.length, requested: 10 } });
     }
     if (body?.action === "player_stats") {
       // PostgREST may cap responses at 1,000 rows even when a larger limit is requested.
