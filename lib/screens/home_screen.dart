@@ -383,8 +383,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return DateTime(local.year, local.month, local.day);
   }
 
-  String _formatSlateDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
   Map<DateTime, List<NbaGame>> get _gamesByLocalDate {
     final grouped = <DateTime, List<NbaGame>>{};
