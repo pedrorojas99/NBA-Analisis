@@ -18,3 +18,10 @@ create index if not exists idx_team_roster_team_active on public.team_roster(tea
 create index if not exists idx_team_roster_player on public.team_roster(player_id);
 alter table public.team_roster enable row level security;
 revoke all on public.team_roster from anon, authenticated;
+
+alter table public.team_roster
+  add column if not exists career_games integer,
+  add column if not exists career_points_avg numeric(6,2),
+  add column if not exists career_rebounds_avg numeric(6,2),
+  add column if not exists career_threes_avg numeric(6,2),
+  add column if not exists career_stats_synced_at timestamptz;
