@@ -80,7 +80,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
   Widget _playerGroup(String teamName, String abbreviation) {
     final players = widget.players.where((p) => p.teamAbbreviation.toUpperCase() == abbreviation.toUpperCase()).toList()
       ..sort((a, b) => _impact(b).compareTo(_impact(a)));
-    final top = players.take(4).toList();
+    final top = players.take(2).toList();
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -95,7 +95,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
             decoration: BoxDecoration(color: entry.key.isEven ? const Color(0xFFF0F5FA) : const Color(0xFFFFF4EA), borderRadius: BorderRadius.circular(10)),
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p.playerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('${entry.key + 1}. ${p.playerName}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text('${p.position ?? 'Titular'} · ${p.sampleGames} partidos · ${p.injuryClear ? 'disponibilidad verificada' : 'lesiones sin confirmar'}', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
               ])),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
