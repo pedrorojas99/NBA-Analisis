@@ -6,7 +6,7 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
-const MODEL_VERSION = "player-starter-form-0.2";
+const MODEL_VERSION = "player-impact-top2-0.1";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" },
@@ -58,7 +58,7 @@ function normalizedStatRow(stats: any) {
 function injuryStatusBlocks(status: unknown, injury: any): boolean {
   const value = norm(status);
   if (!value) return Boolean(injury?.details || injury?.type);
-  return !["active", "available", "healthy", "returned", "cleared"].includes(value);
+  return !["active", "available", "healthy", "returned", "cleared", "probable"].includes(value);
 }
 
 function extractAvailability(summary: any, expectedEspnTeamIds: string[], localTeamByEspn: Map<string, string>) {
@@ -95,14 +95,14 @@ function extractAvailability(summary: any, expectedEspnTeamIds: string[], localT
         const entry = item?.athlete ?? item ?? {};
         const athlete = entry?.athlete ?? entry;
         const playerId = String(athlete?.id ?? entry?.id ?? "");
-        if (!playerId || entry?.starter !== true || entry?.active !== true || entry?.didNotPlay === true) continue;
+        if (!playerId || entry?.didNotPlay === true) continue;
         if (injuredIds.has(playerId)) continue;
         byPlayer.set(playerId, {
           espn_player_id: playerId,
           team_id: localTeamId,
           player_name: athlete?.displayName ?? athlete?.fullName ?? entry?.displayName ?? "Jugador",
           position: athlete?.position?.abbreviation ?? athlete?.position?.displayName ?? null,
-          starter_confirmed: true,
+          starter_confirmed: entry?.starter === true,
           injury_clear: injuryReportComplete,
         });
       }
@@ -218,8 +218,8 @@ Deno.serve(async (req: Request) => {
         const { data: created, error: createError } = await supabase.from("model_versions").insert({
           version_name: MODEL_VERSION,
           feature_set_version: "player-starter-features-0.1",
-          model_description: "Proyecciones experimentales de puntos, rebotes, asistencias y triples para titulares activos confirmados por ESPN; la disponibilidad se marca como no verificada cuando el informe de lesiones está incompleto.",
-          parameters: { method: "blend_last5_last10_60_40", min_games: 3, max_games: 10, availability_gate: "espn_confirmed_active_starter" },
+          model_description: "Proyecciones experimentales de los dos jugadores de mayor impacto por equipo, clasificados por producción estadística reciente y minutos; excluye jugadores con estado Out, Doubtful o Questionable en el informe ESPN.",
+          parameters: { method: "blend_last5_last10_60_40", min_games: 3, max_games: 10, team_player_limit: 2, ranking: "projected_points_rebounds_assists_threes_minutes", availability_gate: "exclude_out_doubtful_questionable", roster_source: "ESPN boxscore player pool" },
           validation_metrics: { status: "not_yet_validated", note: "No promover sin backtest cronológico de jugadores." },
           status: "experimental",
         }).select("id").single();
@@ -325,7 +325,7 @@ Deno.serve(async (req: Request) => {
           team_name: team?.display_name ?? "",
           team_abbreviation: team?.abbreviation ?? "",
           position: player.position ?? candidate.position,
-          starter_confirmed: true,
+          starter_confirmed: candidate.starter_confirmed === true,
           injury_clear: candidate.injury_clear === true,
           availability_source: candidate.injury_clear === true ? "ESPN lineup and complete injury report" : "ESPN active lineup; injury report incomplete",
           availability_checked_at: nowIso,
@@ -348,7 +348,7 @@ Deno.serve(async (req: Request) => {
         forecasts.push(forecast);
         const snapshot = {
           game_id: candidate.game_id, player_id: playerId, player_history: history,
-          starter_confirmed: true, injury_clear: candidate.injury_clear === true, availability_source: candidate.injury_clear === true ? "ESPN" : "ESPN active lineup; injury report incomplete",
+          starter_confirmed: candidate.starter_confirmed === true, injury_clear: candidate.injury_clear === true, availability_source: candidate.injury_clear === true ? "ESPN injury report complete" : "ESPN injury report incomplete",
         };
         predictionRows.push({
           game_id: candidate.game_id, model_version_id: activeModelId,
@@ -356,6 +356,44 @@ Deno.serve(async (req: Request) => {
           forecast, input_snapshot_sha256: await sha256(JSON.stringify(snapshot)),
         });
       }
+      // Rank eligible players within each game/team by projected statistical impact.
+      // Out, Doubtful and Questionable players have already been removed by the availability filter.
+      const rankedGroups = new Map<string, any[]>();
+      for (const forecast of forecasts) {
+        const key = `${forecast.game_id}:${forecast.team_id}`;
+        if (!rankedGroups.has(key)) rankedGroups.set(key, []);
+        rankedGroups.get(key)!.push(forecast);
+      }
+      const selectedForecasts: any[] = [];
+      const selectedKeys = new Set<string>();
+      for (const group of rankedGroups.values()) {
+        group.sort((a, b) => {
+          const impact = (p: any) => Number(p.predicted_points ?? 0)
+            + 1.2 * Number(p.predicted_rebounds ?? 0)
+            + 1.5 * Number(p.predicted_assists ?? 0)
+            + 0.5 * Number(p.predicted_threes ?? 0)
+            + 0.1 * Number(p.predicted_minutes ?? 0);
+          return impact(b) - impact(a);
+        });
+        for (const [index, forecast] of group.slice(0, 2).entries()) {
+          forecast.team_rank = index + 1;
+          selectedForecasts.push(forecast);
+          selectedKeys.add(`${forecast.game_id}:${forecast.player_id}`);
+        }
+      }
+      forecasts = selectedForecasts;
+      const selectedPredictionRows = predictionRows.filter((row: any) =>
+        selectedKeys.has(`${row.game_id}:${row.target_key}`)
+      );
+      for (const row of selectedPredictionRows) {
+        const selected = forecasts.find((forecast: any) =>
+          forecast.game_id === row.game_id && forecast.player_id === row.target_key
+        );
+        if (selected) row.forecast = selected;
+      }
+      predictionRows.length = 0;
+      predictionRows.push(...selectedPredictionRows);
+
       for (let offset = 0; offset < predictionRows.length; offset += 50) {
         const { data, error } = await supabase.from("predictions").upsert(predictionRows.slice(offset, offset + 50), {
           onConflict: "game_id,model_version_id,prediction_type,target_key,input_snapshot_sha256",
@@ -386,7 +424,7 @@ Deno.serve(async (req: Request) => {
       }
       for (const row of saved ?? []) {
         const forecast = row.forecast ?? {};
-        if (forecast.starter_confirmed !== true) continue;
+        // Non-starters are eligible: the ranking selects the two most influential available players.
         const game = slateGames.find((g: any) => g.id === row.game_id);
         if (!game) continue;
         // Keep the original pre-game availability verification in the immutable forecast.
@@ -446,8 +484,8 @@ Deno.serve(async (req: Request) => {
       ok: true,
       generated_at: nowIso,
       model: { version: MODEL_VERSION, name: "Starter Player Rolling Blend", status: "experimental",
-        description: "60% media disponible de hasta 10 partidos y 40% media disponible de hasta 5; mínimo 3 partidos históricos y titulares activos confirmados por ESPN. La disponibilidad se marca como no verificada si el informe de lesiones está incompleto.",
-        minimum_games: 3, availability_gate: "confirmed_active_starter" },
+        description: "Dos jugadores de mayor impacto por equipo, rankeados por proyección estadística; se excluyen estados Out, Doubtful y Questionable. La disponibilidad se marca como no verificada si el informe de lesiones está incompleto.",
+        minimum_games: 3, players_per_team: 2, availability_gate: "exclude_out_doubtful_questionable" },
       slate_date: slateDate, slate_status: slateStatus,
       player_forecasts: forecasts,
       skipped,
