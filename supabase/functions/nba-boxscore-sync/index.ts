@@ -39,6 +39,19 @@ function playerRows(boxPlayers: any[]) {
   }
   return rows;
 }
+
+async function callSecondaryBoxscore(body: Record<string, unknown>) {
+  const response = await fetch(`${PROJECT_URL}/functions/v1/nba-secondary-boxscore`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "apikey": PUBLIC_KEY! },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(105000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return { ok: false, error: `secondary function HTTP ${response.status}` };
+  return payload;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
   if (!PUBLIC_KEY || req.headers.get("apikey") !== PUBLIC_KEY) return json({ error: "Unauthorized" }, 401);
@@ -51,7 +64,7 @@ Deno.serve(async (req: Request) => {
   try {
     const cutoff = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
     const { data: games, error: gamesError } = await supabase.from("games")
-      .select("id,status,scheduled_start,game_source_ids!inner(source_game_id,source_name)")
+      .select("id,status,scheduled_start,home_team_id,away_team_id,game_source_ids!inner(source_game_id,source_name)")
       .eq("game_source_ids.source_name", "espn")
       .in("status", ["in_progress", "final"])
       .gte("scheduled_start", cutoff)
@@ -79,10 +92,47 @@ Deno.serve(async (req: Request) => {
         headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0 boxscore-ingestion" },
         signal: AbortSignal.timeout(20000)
       });
-      if (!response.ok) { issues.push(`${eventId}: ESPN HTTP ${response.status}`); continue; }
+      const { data: homeTeam, error: homeTeamError } = await supabase.from("teams").select("abbreviation").eq("id", game.home_team_id).maybeSingle();
+      const { data: awayTeam, error: awayTeamError } = await supabase.from("teams").select("abbreviation").eq("id", game.away_team_id).maybeSingle();
+      if (homeTeamError || awayTeamError || !homeTeam || !awayTeam) throw new Error("Could not resolve local team abbreviations for secondary source");
+      const { data: resultRow, error: resultError } = await supabase.from("game_results").select("home_score,away_score,is_final").eq("game_id", game.id).maybeSingle();
+      if (resultError) throw new Error("Could not load final scores for secondary source");
+      const trySecondary = async () => {
+        if (game.status !== "final" || !resultRow?.is_final) return { ok:false, error:"Secondary boxscore recovery is limited to confirmed final games" };
+        return await callSecondaryBoxscore({
+          game_id: game.id, espn_event_id: String(eventId), game_date: game.scheduled_start,
+          home_abbr: homeTeam.abbreviation, away_abbr: awayTeam.abbreviation,
+          home_score: Number(resultRow.home_score), away_score: Number(resultRow.away_score)
+        });
+      };
+      if (!response.ok) {
+        const fallback = await trySecondary();
+        if (fallback?.ok) {
+          gamesWithBoxscore++;
+          teamsSaved += Number(fallback.team_stat_rows_saved ?? 0);
+          playersSaved += Number(fallback.player_stat_rows_saved ?? 0);
+          snapshotsSaved++;
+          continue;
+        }
+        issues.push(`${eventId}: ESPN HTTP ${response.status}; NBA secondary: ${fallback?.error ?? "unavailable"}`);
+        continue;
+      }
       const summary = await response.json();
       const box = summary.boxscore;
-      if (!box || (!Array.isArray(box.players) && !Array.isArray(box.teams))) continue;
+      const hasTeamStats = Array.isArray(box?.teams) && box.teams.length >= 2 && box.teams.every((t: any) => Array.isArray(t.statistics) && t.statistics.length > 0);
+      const hasPlayerStats = Array.isArray(box?.players) && box.players.some((g: any) => (g.statistics ?? []).some((c: any) => (c.athletes ?? []).length > 0));
+      if (!hasTeamStats || !hasPlayerStats) {
+        const fallback = await trySecondary();
+        if (fallback?.ok) {
+          gamesWithBoxscore++;
+          teamsSaved += Number(fallback.team_stat_rows_saved ?? 0);
+          playersSaved += Number(fallback.player_stat_rows_saved ?? 0);
+          snapshotsSaved++;
+        } else {
+          issues.push(`${eventId}: ESPN boxscore missing; NBA secondary: ${fallback?.error ?? "unavailable"}`);
+        }
+        continue;
+      }
       const capturedAt = new Date().toISOString();
       const digest = await sha256(JSON.stringify(summary));
       const { error: snapError } = await supabase.from("raw_source_snapshots").upsert({
