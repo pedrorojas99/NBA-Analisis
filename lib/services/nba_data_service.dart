@@ -106,6 +106,21 @@ class NbaData {
 }
 
 class NbaDataService {
+  Future<NbaData> loadLiveScores() async {
+    final response = await Supabase.instance.client.functions.invoke(
+      'nba-public-data',
+      body: {'action': 'live_scores'},
+    );
+    if (response.status < 200 || response.status >= 300 || response.data is! Map) {
+      throw Exception('No se pudo actualizar el marcador en vivo (HTTP ${response.status}).');
+    }
+    final body = Map<String, dynamic>.from(response.data as Map);
+    if (body['ok'] != true) {
+      throw Exception((body['error'] ?? 'Marcadores en vivo no disponibles.').toString());
+    }
+    return NbaData.fromJson(body);
+  }
+
   Future<NbaData> load() async {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
