@@ -23,6 +23,7 @@ class MatchupPredictionCard extends StatefulWidget {
 
 class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
   late Future<List<Map<String, dynamic>>> _headToHead;
+  bool _showTeamStats = false;
 
   @override
   void initState() {
@@ -193,12 +194,50 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       const SizedBox(height: 8),
       Text('Ganador estimado: ${f.predictedWinner}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
       const Divider(height: 20),
-      _teamStatsComparison(),
-      const Divider(height: 20),
       const Text('Pronósticos individuales', style: TextStyle(fontWeight: FontWeight.w900)),
       const Text('Se muestran los dos jugadores de mayor impacto de cada equipo, según sus estadísticas recientes. Los jugadores con estado Out, Doubtful o Questionable se excluyen; si el informe de lesiones está incompleto, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
       _playerGroup(f.awayTeam, widget.awayTeam?.abbreviation ?? ''),
       _playerGroup(f.homeTeam, widget.homeTeam?.abbreviation ?? ''),
+      const SizedBox(height: 12),
+      InkWell(
+        onTap: () => setState(() => _showTeamStats = !_showTeamStats),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F5FA),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFD8E4EF)),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text('Estadísticas pronosticadas de los equipos',
+                    style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF174A7E))),
+              ),
+              Text(_showTeamStats ? 'Ocultar' : 'Ver estadísticas',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: _showTeamStats ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF174A7E)),
+              ),
+            ],
+          ),
+        ),
+      ),
+      AnimatedSize(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: _showTeamStats
+            ? Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _teamStatsComparison(),
+              )
+            : const SizedBox(width: double.infinity, height: 0),
+      ),
     ]));
   }
 
