@@ -46,6 +46,20 @@ const flattenAthletes = (data: any): any[] => {
     seen.add(id); return true;
   });
 };
+
+const careerStat = (data: any, statName: string): number | null => {
+  const categories = data?.splits?.categories ?? [];
+  for (const category of categories) {
+    for (const stat of category?.stats ?? []) {
+      if (stat?.name === statName) {
+        const value = Number(stat.value);
+        return Number.isFinite(value) ? Number(value.toFixed(1)) : null;
+      }
+    }
+  }
+  return null;
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, error: "Use POST" }, 405);
   if (!PUBLIC_KEY || req.headers.get("apikey") !== PUBLIC_KEY) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -109,6 +123,7 @@ Deno.serve(async (req: Request) => {
             position, active: true, synced_at: new Date().toISOString(), updated_at: new Date().toISOString()
           }, { onConflict: "team_id,player_id" });
           if (rosterErr) throw rosterErr;
+
         }
         summary.push({ team: team.teams?.abbreviation, ok: true, players: athletes.length });
         await new Promise((resolve) => setTimeout(resolve, 150));
@@ -122,49 +137,53 @@ Deno.serve(async (req: Request) => {
     if (teamErr) throw teamErr;
     if (!team) return json({ ok: false, error: "Team not found" }, 404);
     const { data: roster, error: rosterErr } = await db.from("team_roster")
-      .select("player_id,source_player_id,headshot_url,jersey,position,synced_at,players!inner(id,display_name)")
+      .select("player_id,source_player_id,headshot_url,jersey,position,synced_at,career_games,career_points_avg,career_rebounds_avg,career_threes_avg,career_stats_synced_at,players!inner(id,display_name)")
       .eq("team_id", teamId).eq("active", true).order("position").order("players(display_name)");
     if (rosterErr) throw rosterErr;
-    const playerIds = (roster ?? []).map((r: any) => r.player_id);
-    const seasonStart = new Date().getUTCMonth() >= 9 ? new Date(Date.UTC(new Date().getUTCFullYear(), 9, 1)) : new Date(Date.UTC(new Date().getUTCFullYear() - 1, 9, 1));
-    const statsByPlayer = new Map<string, any[]>();
-    for (let offset = 0; offset < playerIds.length; offset += 50) {
-      const batch = playerIds.slice(offset, offset + 50);
-      const { data: statRows, error: statsErr } = await db.from("player_game_stats")
-        .select("player_id,game_id,stats,captured_at")
-        .eq("team_id", teamId).in("player_id", batch)
-        .or("validation_status.is.null,validation_status.neq.rejected")
-        .order("captured_at", { ascending: false }).limit(5000);
-      if (statsErr) throw statsErr;
-      const latest = new Map<string, any>();
-      for (const row of statRows ?? []) if (!latest.has(row.player_id + ":" + row.game_id)) latest.set(row.player_id + ":" + row.game_id, row);
-      const rows = [...latest.values()];
-      const gameIds = [...new Set(rows.map((r: any) => r.game_id))];
-      const gameDates = new Map<string, string>();
-      for (let i = 0; i < gameIds.length; i += 100) {
-        const { data: games, error: gamesErr } = await db.from("games").select("id,scheduled_start")
-          .in("id", gameIds.slice(i, i + 100)).gte("scheduled_start", seasonStart.toISOString());
-        if (gamesErr) throw gamesErr;
-        for (const g of games ?? []) gameDates.set(g.id, g.scheduled_start);
-      }
-      for (const row of rows) {
-        if (!gameDates.has(row.game_id)) continue;
-        if (!statsByPlayer.has(row.player_id)) statsByPlayer.set(row.player_id, []);
-        statsByPlayer.get(row.player_id)!.push(row.stats ?? {});
-      }
+    const staleCareerRows = (roster ?? []).filter((r: any) => {
+      const last = r.career_stats_synced_at ? new Date(r.career_stats_synced_at).getTime() : 0;
+      return !last || Date.now() - last > 24 * 60 * 60 * 1000;
+    });
+    for (let offset = 0; offset < staleCareerRows.length; offset += 5) {
+      const batch = staleCareerRows.slice(offset, offset + 5);
+      await Promise.all(batch.map(async (r: any) => {
+        try {
+          const careerResponse = await fetch(`https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/athletes/${r.source_player_id}/statistics`, {
+            headers: { "accept": "application/json", "user-agent": "NBA-Analytics/1.0" }
+          });
+          if (!careerResponse.ok) return;
+          const careerData = await careerResponse.json();
+          const careerGames = careerStat(careerData, "gamesPlayed");
+          const careerPoints = careerStat(careerData, "avgPoints");
+          const careerRebounds = careerStat(careerData, "avgRebounds");
+          const careerThrees = careerStat(careerData, "avgThreePointFieldGoalsMade");
+          const syncedAt = new Date().toISOString();
+          const { error: careerErr } = await db.from("team_roster").update({
+            career_games: careerGames == null ? null : Math.round(careerGames),
+            career_points_avg: careerPoints,
+            career_rebounds_avg: careerRebounds,
+            career_threes_avg: careerThrees,
+            career_stats_synced_at: syncedAt
+          }).eq("team_id", teamId).eq("player_id", r.player_id);
+          if (careerErr) throw careerErr;
+          r.career_games = careerGames == null ? null : Math.round(careerGames);
+          r.career_points_avg = careerPoints;
+          r.career_rebounds_avg = careerRebounds;
+          r.career_threes_avg = careerThrees;
+          r.career_stats_synced_at = syncedAt;
+        } catch (careerError) {
+          console.warn("career stats refresh failed", r.source_player_id, careerError);
+        }
+      }));
     }
-    const playersOut = (roster ?? []).map((r: any) => {
-      const stats = statsByPlayer.get(r.player_id) ?? [];
-      const avg = (key: string) => stats.length ? Number((stats.reduce((sum, s) => sum + asNum(s[key]), 0) / stats.length).toFixed(1)) : null;
-      const threes = stats.length ? Number((stats.reduce((sum, s) => sum + threeMade(s["3PT"]), 0) / stats.length).toFixed(1)) : null;
-      return {
-        player_id: r.player_id, name: r.players?.display_name ?? "Jugador",
-        position: r.position ?? "Sin posición", jersey: r.jersey,
-        headshot_url: r.headshot_url, games: stats.length,
-        points_avg: avg("PTS"), rebounds_avg: avg("REB"), threes_avg: threes
-      };
-    }).sort((a: any, b: any) => (a.position ?? "").localeCompare(b.position ?? "") || a.name.localeCompare(b.name));
-    return json({ ok: true, team, players: playersOut, synced_at: (roster ?? []).reduce((latest: string | null, r: any) => !latest || r.synced_at > latest ? r.synced_at : latest, null), season_start: seasonStart.toISOString() });
+    const playersOut = (roster ?? []).map((r: any) => ({
+      player_id: r.player_id, name: r.players?.display_name ?? "Jugador",
+      position: r.position ?? "Sin posición", jersey: r.jersey,
+      headshot_url: r.headshot_url, games: r.career_games ?? 0,
+      points_avg: r.career_points_avg, rebounds_avg: r.career_rebounds_avg,
+      threes_avg: r.career_threes_avg
+    })).sort((a: any, b: any) => (a.position ?? "").localeCompare(b.position ?? "") || a.name.localeCompare(b.name));
+    return json({ ok: true, team, players: playersOut, synced_at: (roster ?? []).reduce((latest: string | null, r: any) => !latest || r.synced_at > latest ? r.synced_at : latest, null), stats_type: "career_regular_season", stats_synced_at: (roster ?? []).reduce((latest: string | null, r: any) => !latest || (r.career_stats_synced_at && r.career_stats_synced_at > latest) ? r.career_stats_synced_at : latest, null) });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("nba-roster-sync", message);
