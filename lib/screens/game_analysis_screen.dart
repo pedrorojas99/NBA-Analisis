@@ -89,7 +89,7 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
     final teamStats = (data?['team_stats'] as List? ?? []).whereType<Map>().toList();
     String stat(dynamic row, String key) => '${_flatStats((row as Map)['stats'])[key] ?? '—'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text('${game.status == 'final' ? 'RESULTADO FINAL Y ESTADÍSTICAS REALES' : 'ESTADÍSTICAS DEL PARTIDO EN VIVO'}',
+      const Padding(padding: EdgeInsets.fromLTRB(4, 10, 4, 6), child: Text(game.status == 'final' ? 'RESULTADO FINAL Y ESTADÍSTICAS REALES' : 'ESTADÍSTICAS DEL PARTIDO EN VIVO',
         style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF174A7E)))),
       Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
         Text('${game.awayTeam?.name ?? 'Visitante'}  ${game.awayScore ?? '—'} - ${game.homeScore ?? '—'}  ${game.homeTeam?.name ?? 'Local'}',
