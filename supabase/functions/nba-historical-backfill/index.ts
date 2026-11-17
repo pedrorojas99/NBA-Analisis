@@ -27,8 +27,9 @@ async function sha256(value: string) {
 }
 function dateKey(d: Date) { return d.toISOString().slice(0, 10).replaceAll("-", ""); }
 function seasonYear(iso: string) {
+  // NBA season is stored by ending year: 2025-26 => 2026; 2026-27 => 2027.
   const d = new Date(iso);
-  return d.getUTCFullYear() - (d.getUTCMonth() < 6 ? 1 : 0);
+  return d.getUTCMonth() >= 6 ? d.getUTCFullYear() + 1 : d.getUTCFullYear();
 }
 function playerRows(boxPlayers: any[]) {
   const byId = new Map<string, any>();
@@ -60,6 +61,19 @@ function playerRows(boxPlayers: any[]) {
   }
   return [...byId.values()];
 }
+
+async function callSecondaryBoxscore(body: Record<string, unknown>) {
+  const response = await fetch(`${PROJECT_URL}/functions/v1/nba-secondary-boxscore`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "apikey": PUBLIC_KEY! },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(105000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) return { ok: false, error: `secondary function HTTP ${response.status}` };
+  return payload;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
   if (!PUBLIC_KEY || req.headers.get("apikey") !== PUBLIC_KEY) return json({ error: "Unauthorized" }, 401);
@@ -77,6 +91,13 @@ Deno.serve(async (req: Request) => {
     if (jobError || !job) return json({ error: "No pending historical job found", detail: jobError?.message }, 404);
     jobId = job.id;
     if (job.status === "completed") return json({ ok: true, status: "completed", job_id: job.id, metadata: job.metadata });
+    // Atomically claim queued work so overlapping cron invocations cannot process the same date range.
+    const { data: claimedJob, error: claimError } = await supabase.from("historical_backfill_jobs")
+      .update({ status: "running", updated_at: new Date().toISOString(), last_error: null })
+      .eq("id", job.id).eq("status", "queued").select("id").maybeSingle();
+    if (claimError) throw new Error("Could not claim historical job: " + claimError.message);
+    if (!claimedJob) return json({ ok: true, status: "busy", job_id: job.id }, 202);
+
     const startedAt = new Date().toISOString();
     const { data: run, error: runError } = await supabase.from("source_ingestion_runs")
       .insert({ source_name: "espn_historical_backfill", started_at: startedAt, ok: false })
@@ -88,6 +109,12 @@ Deno.serve(async (req: Request) => {
     const { count: teamsSynced, error: teamsCountError } = await supabase.from("teams").select("id", { count: "exact", head: true });
     if (teamsCountError || (teamsSynced ?? 0) < 30) throw new Error(`Expected at least 30 registered NBA teams, found ${teamsSynced ?? 0}`);
 
+    // Retry previously missed boxscores with the secondary NBA feed before processing new dates.
+    try {
+      await callSecondaryBoxscore({ mode: "recover_pending", limit: 1 });
+    } catch (recoveryError) {
+      issues.push("Secondary recovery pass: " + (recoveryError instanceof Error ? recoveryError.message : String(recoveryError)));
+    }
     let cursor = new Date(job.next_date + "T00:00:00.000Z");
     const end = new Date(job.end_date + "T00:00:00.000Z");
     const maxDays = Math.min(7, Math.max(1, Number(job.days_per_run) || 3));
@@ -105,8 +132,11 @@ Deno.serve(async (req: Request) => {
         const home = competitors.find((c: any) => c.homeAway === "home");
         const away = competitors.find((c: any) => c.homeAway === "away");
         if (!event.id || !event.date || !home?.team?.abbreviation || !away?.team?.abbreviation) continue;
-        const state = event.status?.type?.state ?? "pre";
-        if (state !== "post" || home.score == null || away.score == null) continue;
+        const statusType = event.status?.type ?? {};
+        const state = statusType.state ?? "pre";
+        const statusLabel = `${statusType.name ?? ""} ${statusType.detail ?? ""}`;
+        // A postponed/cancelled event can have state=post and 0-0 scores. Only ingest completed games.
+        if (state !== "post" || statusType.completed !== true || /postponed|cancelled|canceled/i.test(statusLabel) || home.score == null || away.score == null) continue;
         const teamIds: Record<string, string> = {};
         for (const item of [home, away]) {
           const team = item.team;
@@ -158,10 +188,46 @@ Deno.serve(async (req: Request) => {
 
         if (gamesSaved > 1) await wait(350);
         const summaryResponse = await fetchEspn(`${BASE}/summary?event=${encodeURIComponent(String(event.id))}`, "NBA-Analytics/1.0 boxscore-ingestion");
-        if (!summaryResponse.ok) { issues.push(`${event.id}: summary HTTP ${summaryResponse.status}`); continue; }
+        // ESPN may permanently remove historical summaries. A 404 is not transient:
+        // keep the final game/result already saved, record the missing boxscore, and
+        // continue with the next event so one unavailable game cannot freeze the cursor.
+        if (!summaryResponse.ok) {
+          const fallback = await callSecondaryBoxscore({
+            game_id: gameId, espn_event_id: String(event.id), game_date: event.date,
+            home_abbr: homeAbbr, away_abbr: awayAbbr,
+            home_score: Number(home.score), away_score: Number(away.score)
+          });
+          if (fallback?.ok) {
+            boxscoresSaved++;
+            teamStatsSaved += Number(fallback.team_stat_rows_saved ?? 0);
+            playerStatsSaved += Number(fallback.player_stat_rows_saved ?? 0);
+            issues.push(`ESPN HTTP ${summaryResponse.status}; NBA secondary source recovered ${event.id}`);
+            continue;
+          }
+          issues.push(`ESPN HTTP ${summaryResponse.status}; NBA secondary queued ${event.id}: ${fallback?.error ?? "unavailable"}`);
+          if (summaryResponse.status !== 404) throw new Error(`ESPN summary ${event.id} HTTP ${summaryResponse.status}; secondary queued for retry`);
+          continue;
+        }
         const summary = await summaryResponse.json();
         const box = summary.boxscore;
-        if (!box || (!Array.isArray(box.players) && !Array.isArray(box.teams))) { issues.push(`${event.id}: boxscore missing`); continue; }
+        const hasTeamStats = Array.isArray(box?.teams) && box.teams.length >= 2 && box.teams.every((t: any) => Array.isArray(t.statistics) && t.statistics.length > 0);
+        const hasPlayerStats = Array.isArray(box?.players) && box.players.some((g: any) => (g.statistics ?? []).some((c: any) => (c.athletes ?? []).length > 0));
+        if (!hasTeamStats || !hasPlayerStats) {
+          const fallback = await callSecondaryBoxscore({
+            game_id: gameId, espn_event_id: String(event.id), game_date: event.date,
+            home_abbr: homeAbbr, away_abbr: awayAbbr,
+            home_score: Number(home.score), away_score: Number(away.score)
+          });
+          if (fallback?.ok) {
+            boxscoresSaved++;
+            teamStatsSaved += Number(fallback.team_stat_rows_saved ?? 0);
+            playerStatsSaved += Number(fallback.player_stat_rows_saved ?? 0);
+            issues.push(`ESPN boxscore missing; NBA secondary recovered ${event.id}`);
+          } else {
+            issues.push(`ESPN boxscore missing; NBA secondary queued ${event.id}: ${fallback?.error ?? "unavailable"}`);
+          }
+          continue;
+        }
         const capturedAt = new Date().toISOString();
         const compactSummary = { header: summary.header ?? null, boxscore: box };
         const digest = await sha256(JSON.stringify(compactSummary));
@@ -251,7 +317,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, job_id: job.id, status: finished ? "completed" : "queued", dates_checked: datesChecked, next_date: finished ? null : nextDate, ...metadata });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (jobId) await supabase.from("historical_backfill_jobs").update({ status: "failed", last_error: message, updated_at: new Date().toISOString() }).eq("id", jobId);
+    // Keep transient failures queued so the cron retries the same cursor.
+    if (jobId) await supabase.from("historical_backfill_jobs").update({ status: "queued", last_error: message, updated_at: new Date().toISOString() }).eq("id", jobId).eq("status", "running");
     if (runId) await supabase.from("source_ingestion_runs").update({ finished_at: new Date().toISOString(), ok: false, error_message: message }).eq("id", runId);
     return json({ ok: false, error: message, job_id: jobId }, 502);
   }
