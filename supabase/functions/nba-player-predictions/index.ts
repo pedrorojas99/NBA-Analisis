@@ -440,50 +440,68 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Settle only players who actually appeared in a final boxscore. DNPs remain unevaluated.
-    if (persistRequested && slateGames.some((g: any) => g.status === "final")) {
-      const finalSlateIds = slateGames.filter((g: any) => g.status === "final").map((g: any) => g.id);
-      const { data: saved, error: savedError } = await supabase.from("predictions")
-        .select("id,game_id,forecast").in("game_id", finalSlateIds).eq("prediction_type", "player");
-      if (savedError) throw new Error("Player predictions for evaluation failed: " + savedError.message);
-      const actualRows: any[] = [];
-      for (let offset = 0; offset < finalSlateIds.length; offset += 100) {
-        const { data, error } = await supabase.from("player_game_stats")
-          .select("game_id,player_id,stats,validation_status")
-          .in("game_id", finalSlateIds.slice(offset, offset + 100))
-          .neq("validation_status", "rejected");
-        if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
-        actualRows.push(...(data ?? []));
-      }
-      const actualMap = new Map<string, any>();
-      for (const row of actualRows) {
-        const parsed = normalizedStatRow(row.stats);
-        if (parsed) actualMap.set(`${row.game_id}:${row.player_id}`, parsed);
-      }
-      const evalRows: any[] = [];
-      for (const prediction of saved ?? []) {
-        const forecast = prediction.forecast ?? {};
-        const actual = actualMap.get(`${prediction.game_id}:${forecast.player_id}`);
-        if (!actual) continue;
-        const fields = ["points", "rebounds", "assists", "threes", "minutes"];
-        const errorMetrics: Record<string, number> = {};
-        for (const field of fields) {
-          const predicted = Number(forecast[`predicted_${field}`]);
-          if (Number.isFinite(predicted)) errorMetrics[`${field}_abs_error`] = round(Math.abs(predicted - actual[field]));
+    // Settle pending player forecasts independently of the current upcoming slate.
+    // The previous implementation only inspected slateGames (the next non-final date),
+    // so completed games disappeared from that list before this evaluator could see them.
+    if (persistRequested) {
+      const settlementFrom = new Date(now.getTime() - 14 * 86400000).toISOString();
+      const { data: recentFinalGames, error: finalGamesError } = await supabase.from("games")
+        .select("id").eq("status", "final").gte("scheduled_start", settlementFrom)
+        .lte("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(300);
+      if (finalGamesError) throw new Error("Recent final games lookup failed: " + finalGamesError.message);
+      const recentFinalIds = (recentFinalGames ?? []).map((g: any) => g.id);
+      if (recentFinalIds.length) {
+        const { data: saved, error: savedError } = await supabase.from("predictions")
+          .select("id,game_id,forecast").in("game_id", recentFinalIds).eq("prediction_type", "player");
+        if (savedError) throw new Error("Player predictions for evaluation failed: " + savedError.message);
+        const actualRows: any[] = [];
+        for (let offset = 0; offset < recentFinalIds.length; offset += 100) {
+          const { data, error } = await supabase.from("player_game_stats")
+            .select("game_id,player_id,stats,validation_status")
+            .in("game_id", recentFinalIds.slice(offset, offset + 100))
+            .neq("validation_status", "rejected");
+          if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
+          actualRows.push(...(data ?? []));
         }
-        evalRows.push({
-          prediction_id: prediction.id,
-          actual: { game_id: prediction.game_id, player_id: forecast.player_id, ...actual, source: "ESPN final boxscore" },
-          error_metrics: errorMetrics,
-          result_source_names: ["espn"],
-        });
-      }
-      for (let offset = 0; offset < evalRows.length; offset += 50) {
-        const { data, error } = await supabase.from("prediction_evaluations").upsert(evalRows.slice(offset, offset + 50), {
-          onConflict: "prediction_id", ignoreDuplicates: true,
-        }).select("id");
-        if (error) throw new Error("Player evaluations persistence failed: " + error.message);
-        predictionsEvaluated += data?.length ?? 0;
+        const actualMap = new Map<string, any>();
+        for (const row of actualRows) {
+          const parsed = normalizedStatRow(row.stats);
+          if (parsed) actualMap.set(`${row.game_id}:${row.player_id}`, parsed);
+        }
+        const savedIds = (saved ?? []).map((p: any) => p.id);
+        const existingEvalIds = new Set<string>();
+        for (let offset = 0; offset < savedIds.length; offset += 100) {
+          const { data, error } = await supabase.from("prediction_evaluations")
+            .select("prediction_id").in("prediction_id", savedIds.slice(offset, offset + 100));
+          if (error) throw new Error("Existing player evaluations lookup failed: " + error.message);
+          for (const row of data ?? []) existingEvalIds.add(row.prediction_id);
+        }
+        const evalRows: any[] = [];
+        for (const prediction of saved ?? []) {
+          if (existingEvalIds.has(prediction.id)) continue;
+          const forecast = prediction.forecast ?? {};
+          const actual = actualMap.get(`${prediction.game_id}:${forecast.player_id}`);
+          if (!actual) continue; // DNP / missing validated boxscore: keep pending, never invent zeroes.
+          const fields = ["points", "rebounds", "assists", "threes", "minutes"];
+          const errorMetrics: Record<string, number> = {};
+          for (const field of fields) {
+            const predicted = Number(forecast[`predicted_${field}`]);
+            if (Number.isFinite(predicted)) errorMetrics[`${field}_abs_error`] = round(Math.abs(predicted - actual[field]));
+          }
+          evalRows.push({
+            prediction_id: prediction.id,
+            actual: { game_id: prediction.game_id, player_id: forecast.player_id, ...actual, source: "ESPN final boxscore" },
+            error_metrics: errorMetrics,
+            result_source_names: ["espn"],
+          });
+        }
+        for (let offset = 0; offset < evalRows.length; offset += 50) {
+          const { data, error } = await supabase.from("prediction_evaluations").upsert(evalRows.slice(offset, offset + 50), {
+            onConflict: "prediction_id", ignoreDuplicates: true,
+          }).select("id");
+          if (error) throw new Error("Player evaluations persistence failed: " + error.message);
+          predictionsEvaluated += data?.length ?? 0;
+        }
       }
     }
 
