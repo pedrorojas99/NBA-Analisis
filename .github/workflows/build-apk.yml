@@ -6,6 +6,8 @@ permissions:
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -29,17 +31,10 @@ jobs:
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
               android:viewportWidth="108" android:viewportHeight="108">
-              <path android:fillColor="#EF6C35"
-                  android:fillType="evenOdd" android:pathData="M54,5 L7,103 L31,103 L41,81 L67,81 L77,103 L101,103 Z M54,43 L43,69 L65,69 Z"/>
-              <path android:fillColor="@android:color/transparent" android:strokeColor="#252B33"
+              <path android:fillColor="#E8752E" android:pathData="M54,4 A50,50 0,1 0,54 104 A50,50 0,1 0,54 4"/>
+              <path android:fillColor="@android:color/transparent" android:strokeColor="#241D1A"
                   android:strokeWidth="4" android:strokeLineCap="round"
-                  android:pathData="M51,9 C38,34 27,63 15,91"/>
-              <path android:fillColor="@android:color/transparent" android:strokeColor="#252B33"
-                  android:strokeWidth="4" android:strokeLineCap="round"
-                  android:pathData="M57,9 C70,34 81,63 93,91"/>
-              <path android:fillColor="@android:color/transparent" android:strokeColor="#252B33"
-                  android:strokeWidth="4" android:strokeLineCap="round"
-                  android:pathData="M35,68 L73,68"/>
+                  android:pathData="M4,54 L104,54 M54,4 L54,104 M18,18 C40,34 40,74 18,90 M90,18 C68,34 68,74 90,90"/>
           </vector>
           EOF
           sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@drawable/ic_launcher"|' android/app/src/main/AndroidManifest.xml

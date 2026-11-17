@@ -73,7 +73,7 @@ class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
         elevation: brightness == Brightness.dark ? 2 : 1,
         margin: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -109,11 +109,11 @@ class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
         );
       default:
         return _buildTheme(
-          seed: const Color(0xFF1769AA),
-          secondary: const Color(0xFFEF8A4C),
-          background: const Color(0xFFF7F9FC),
-          surface: Colors.white,
-          appBarForeground: const Color(0xFF17324D),
+          seed: const Color(0xFFB94D2B),
+          secondary: const Color(0xFFE8752E),
+          background: const Color(0xFFFFF8F3),
+          surface: const Color(0xFFFFFEFC),
+          appBarForeground: const Color(0xFF4A2D22),
           brightness: Brightness.light,
         );
     }

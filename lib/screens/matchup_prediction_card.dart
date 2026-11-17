@@ -106,7 +106,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('$teamName · jugadores más influyentes', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF174A7E))),
+        Text('$teamName · jugadores más influyentes', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFB94D2B))),
         if (top.isEmpty)
           const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Sin pronósticos individuales verificados para este equipo.')),
         ...top.asMap().entries.map((entry) {
@@ -114,14 +114,14 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
           return Container(
             margin: const EdgeInsets.only(top: 6),
             padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(color: entry.key.isEven ? const Color(0xFFF0F5FA) : const Color(0xFFFFF4EA), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: entry.key.isEven ? const Color(0xFFFFF3EA) : const Color(0xFFFFE9D9), borderRadius: BorderRadius.circular(10)),
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('${entry.key + 1}. ${p.playerName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('${p.position ?? 'Titular'} · ${p.sampleGames} partidos · ${p.injuryClear ? 'disponibilidad verificada' : 'lesiones sin confirmar'}', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+                Text('${p.position ?? 'Titular'} · ${p.sampleGames} partidos · ${p.injuryClear ? 'disponibilidad verificada' : 'lesiones sin confirmar'}', style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
               ])),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('${p.points.toStringAsFixed(1)} PTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF174A7E))),
+                Text('${p.points.toStringAsFixed(1)} PTS', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFFB94D2B))),
                 Text('${p.rebounds.toStringAsFixed(1)} REB · ${p.assists.toStringAsFixed(1)} AST', style: const TextStyle(fontSize: 11)),
                 Text('${p.threes.toStringAsFixed(1)} 3PT · ${p.minutes.toStringAsFixed(1)} MIN', style: const TextStyle(fontSize: 11)),
               ]),
@@ -170,11 +170,11 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Estadísticas colectivas proyectadas', style: TextStyle(fontWeight: FontWeight.w900)),
       const SizedBox(height: 4),
-      Text('${widget.forecast.awayTeam} vs ${widget.forecast.homeTeam}', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+      Text('${widget.forecast.awayTeam} vs ${widget.forecast.homeTeam}', style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
       const SizedBox(height: 6),
       Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        decoration: BoxDecoration(color: const Color(0xFFF0F5FA), borderRadius: BorderRadius.circular(9)),
+        decoration: BoxDecoration(color: const Color(0xFFFFF3EA), borderRadius: BorderRadius.circular(9)),
         child: Row(children: [
           Expanded(child: Text(widget.forecast.awayTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           const SizedBox(width: 118, child: Text('Estadística', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
@@ -185,7 +185,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
         padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
         child: Row(children: [
           Expanded(child: Text(_statValue(away[row.$2], percent: row.$3), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
-          SizedBox(width: 118, child: Text(row.$1, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Color(0xFF667788)))),
+          SizedBox(width: 118, child: Text(row.$1, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Color(0xFF80695F)))),
           Expanded(child: Text(_statValue(home[row.$2], percent: row.$3), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12))),
         ]),
       )),
@@ -201,14 +201,14 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
         Expanded(child: Column(children: [
           _teamLogoButton(widget.awayTeam),
           Text(f.awayTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text(f.predictedAwayScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
+          Text(f.predictedAwayScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B))),
           Text('${f.awayWinProbability.toStringAsFixed(1)}% prob.', style: const TextStyle(fontSize: 12)),
         ])),
         const Text('VS', style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFEF6C35))),
         Expanded(child: Column(children: [
           _teamLogoButton(widget.homeTeam),
           Text(f.homeTeam, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text(f.predictedHomeScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
+          Text(f.predictedHomeScore.toStringAsFixed(0), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B))),
           Text('${f.homeWinProbability.toStringAsFixed(1)}% prob.', style: const TextStyle(fontSize: 12)),
         ])),
       ]),
@@ -216,7 +216,7 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       Text('Ganador estimado: ${f.predictedWinner}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
       const Divider(height: 20),
       const Text('Pronósticos individuales', style: TextStyle(fontWeight: FontWeight.w900)),
-      const Text('Se muestran los dos jugadores de mayor impacto de cada equipo, según sus estadísticas recientes. Los jugadores con estado Out, Doubtful o Questionable se excluyen; si el informe de lesiones está incompleto, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF667788))),
+      const Text('Se muestran los dos jugadores de mayor impacto de cada equipo, según sus estadísticas recientes. Los jugadores con estado Out, Doubtful o Questionable se excluyen; si el informe de lesiones está incompleto, la disponibilidad se marca como no verificada.', style: TextStyle(fontSize: 11, color: Color(0xFF80695F))),
       _playerGroup(f.awayTeam, widget.awayTeam?.abbreviation ?? ''),
       _playerGroup(f.homeTeam, widget.homeTeam?.abbreviation ?? ''),
       const SizedBox(height: 12),
@@ -226,23 +226,23 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            color: const Color(0xFFF0F5FA),
+            color: const Color(0xFFFFF3EA),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFD8E4EF)),
+            border: Border.all(color: const Color(0xFFE8C9B8)),
           ),
           child: Row(
             children: [
               const Expanded(
                 child: Text('Estadísticas pronosticadas de los equipos',
-                    style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF174A7E))),
+                    style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFB94D2B))),
               ),
               Text(_showTeamStats ? 'Ocultar' : 'Ver estadísticas',
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
               const SizedBox(width: 4),
               AnimatedRotation(
                 turns: _showTeamStats ? 0.5 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF174A7E)),
+                child: const Icon(Icons.keyboard_arrow_down, color: Color(0xFFB94D2B)),
               ),
             ],
           ),
@@ -276,18 +276,18 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       if (games.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(16), child: Text('Todavía no hay enfrentamientos registrados entre estos equipos en el historial recopilado.')));
       return ListView(padding: const EdgeInsets.all(12), children: [
         const Text('Últimos enfrentamientos directos finalizados', style: TextStyle(fontWeight: FontWeight.w900)),
-        Text('Se muestran ${games.length} de 5 partidos disponibles en el historial sincronizado.', style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+        Text('Se muestran ${games.length} de 5 partidos disponibles en el historial sincronizado.', style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
         const SizedBox(height: 8),
         ...games.map((g) => Card(
-          color: const Color(0xFFF0F5FA),
+          color: const Color(0xFFFFF3EA),
           child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [
-            Text(_date(g['date']), style: const TextStyle(fontSize: 11, color: Color(0xFF667788))),
+            Text(_date(g['date']), style: const TextStyle(fontSize: 11, color: Color(0xFF80695F))),
             Row(children: [
               Expanded(child: Text(g['away_team']?.toString() ?? 'Visitante', textAlign: TextAlign.end, style: const TextStyle(fontWeight: FontWeight.bold))),
               const SizedBox(width: 5),
               _teamLogo(g['away_abbreviation']?.toString()),
               const SizedBox(width: 5),
-              Text('${g['away_score']} - ${g['home_score']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF174A7E))),
+              Text('${g['away_score']} - ${g['home_score']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B))),
               const SizedBox(width: 5),
               _teamLogo(g['home_abbreviation']?.toString()),
               const SizedBox(width: 5),
@@ -308,9 +308,9 @@ class _MatchupPredictionCardState extends State<MatchupPredictionCard> {
       length: widget.showHeadToHead ? 2 : 1,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 4), child: Row(children: [
-          const Icon(Icons.calendar_today, size: 15, color: Color(0xFF1769AA)),
+          const Icon(Icons.calendar_today, size: 15, color: Color(0xFFB94D2B)),
           const SizedBox(width: 7),
-          Text(widget.forecast.scheduledStart.toLocal().toString().substring(0, 16), style: const TextStyle(fontSize: 12, color: Color(0xFF667788))),
+          Text(widget.forecast.scheduledStart.toLocal().toString().substring(0, 16), style: const TextStyle(fontSize: 12, color: Color(0xFF80695F))),
         ])),
         if (widget.showHeadToHead)
           const TabBar(tabs: [Tab(text: 'Pronóstico'), Tab(text: 'Enfrentamientos')]),
