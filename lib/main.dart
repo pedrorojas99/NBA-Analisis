@@ -73,7 +73,7 @@ class _NbaAnalyticsAppState extends State<NbaAnalyticsApp> {
         elevation: brightness == Brightness.dark ? 2 : 1,
         margin: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
