@@ -24,44 +24,27 @@ class _NbaAnalyticsLogo extends StatelessWidget {
 class _BasketballLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / 100;
-    final sy = size.height / 100;
-    final a = Path()..fillType = PathFillType.evenOdd
-      ..moveTo(50 * sx, 4 * sy)
-      ..lineTo(5 * sx, 96 * sy)
-      ..lineTo(29 * sx, 96 * sy)
-      ..lineTo(39 * sx, 74 * sy)
-      ..lineTo(61 * sx, 74 * sy)
-      ..lineTo(71 * sx, 96 * sy)
-      ..lineTo(95 * sx, 96 * sy)
-      ..close()
-      ..moveTo(50 * sx, 42 * sy)
-      ..lineTo(40 * sx, 67 * sy)
-      ..lineTo(60 * sx, 67 * sy)
-      ..close();
-    final paint = Paint()..color = const Color(0xFFEF6C35);
-    canvas.drawPath(a, paint);
-    final seam = Paint()
-      ..color = const Color(0xFF252B33)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.2 * sx
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(34 * sx, 63 * sy), Offset(66 * sx, 63 * sy), seam);
-    final left = Path()
-      ..moveTo(49 * sx, 7 * sy)
-      ..cubicTo(35 * sx, 31 * sy, 25 * sx, 56 * sy, 14 * sx, 83 * sy);
-    final right = Path()
-      ..moveTo(51 * sx, 7 * sy)
-      ..cubicTo(65 * sx, 31 * sy, 75 * sx, 56 * sy, 86 * sx, 83 * sy);
-    canvas.drawPath(left, seam);
-    canvas.drawPath(right, seam);
-    canvas.drawLine(Offset(40 * sx, 72 * sy), Offset(60 * sx, 72 * sy), seam);
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.shortestSide * 0.46;
+    final ball = Paint()..color = const Color(0xFFE8752E);
+    final seam = Paint()..color = const Color(0xFF241D1A)..style = PaintingStyle.stroke..strokeWidth = size.shortestSide * 0.045..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, ball);
+    canvas.drawCircle(center, radius, seam);
+    final lines = Path()
+      ..moveTo(center.dx - radius, center.dy)..lineTo(center.dx + radius, center.dy)
+      ..moveTo(center.dx, center.dy - radius)..lineTo(center.dx, center.dy + radius)
+      ..moveTo(center.dx - radius * .72, center.dy - radius * .68)
+      ..cubicTo(center.dx - radius * .08, center.dy - radius * .25, center.dx - radius * .08, center.dy + radius * .25, center.dx - radius * .72, center.dy + radius * .68)
+      ..moveTo(center.dx + radius * .72, center.dy - radius * .68)
+      ..cubicTo(center.dx + radius * .08, center.dy - radius * .25, center.dx + radius * .08, center.dy + radius * .25, center.dx + radius * .72, center.dy + radius * .68);
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius)));
+    canvas.drawPath(lines, seam);
+    canvas.restore();
   }
-
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
 class HomeScreen extends StatefulWidget {
   final int themeIndex;
   final ValueChanged<int> onThemeChanged;
@@ -109,6 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double? cloudPreviousSlateAverageMarginError;
   List<Prediction> predictions = [];
   bool loading = true;
+  bool showPreviousResults = false;
 
   @override
   void initState() { super.initState(); refresh(); refreshNbaData(); refreshPredictions(); refreshPlayerPredictions(); }
@@ -328,10 +312,11 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 68,
         title: Row(mainAxisSize: MainAxisSize.min, children: [
-          const _NbaAnalyticsLogo(size: 27),
-          const SizedBox(width: 10),
-          const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+          const _NbaAnalyticsLogo(size: 43),
+          const SizedBox(width: 9),
+          const Text('NBA ANALYTICS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 21, color: Color(0xFFB94D2B))),
         ]),
         actions: [
           IconButton(
@@ -377,14 +362,15 @@ class _HomeScreenState extends State<HomeScreen> {
       body: loading ? const Center(child: CircularProgressIndicator()) : pages[tab],
       floatingActionButton: null,
       bottomNavigationBar: NavigationBar(
+        height: 72,
         selectedIndex: tab,
         onDestinationSelected: (v) => setState(() => tab = v),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.sports_basketball), label: 'NBA'),
           NavigationDestination(icon: Icon(Icons.search), label: 'Buscar'),
-          NavigationDestination(icon: Icon(Icons.edit_note), label: 'Pronósticos'),
+          NavigationDestination(icon: Icon(Icons.sports_basketball_outlined), label: 'Predicciones'),
           NavigationDestination(icon: Icon(Icons.history), label: 'Historial'),
-          NavigationDestination(icon: Icon(Icons.insights), label: 'Aprendizaje'),
+          NavigationDestination(icon: Icon(Icons.menu_book), label: 'Aprendizaje'),
         ],
       ),
     );
@@ -446,8 +432,18 @@ class _HomeScreenState extends State<HomeScreen> {
         refreshPlayerPredictions(),
       ]);
     },
-    child: ListView(padding: const EdgeInsets.all(16), children: [
-
+    child: ListView(padding: const EdgeInsets.all(14), children: [
+      Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: const Color(0xFFFFF0E5), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE8C9B8))),
+        child: Row(children: [const _NbaAnalyticsLogo(size: 50), const SizedBox(width: 12),
+          const Expanded(child: Text('PARTIDOS DE LA JORNADA', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: Color(0xFF4A2D22)))),
+          IconButton(onPressed: refreshNbaData, icon: const Icon(Icons.settings, color: Color(0xFF4A2D22))),
+        ])),
+      OutlinedButton.icon(onPressed: () => setState(() => showPreviousResults = !showPreviousResults), icon: const Icon(Icons.history),
+        label: Text(showPreviousResults ? 'OCULTAR RESULTADOS ANTERIORES' : 'RESULTADOS DE LA JORNADA ANTERIOR'),
+        style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF9E3F20), backgroundColor: const Color(0xFFFFE4D2), side: const BorderSide(color: Color(0xFFD87943)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+      if (showPreviousResults) ...[_section('Resultados de la jornada anterior'),
+        if (_latestCompletedSlateGames.isEmpty) _empty('Todavía no hay una jornada completamente finalizada en los datos recientes.') else ..._latestCompletedSlateGames.map(_nbaGameCard)],
       if (nbaLoading) const Padding(
         padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()),
       ),
@@ -458,14 +454,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!nbaLoading && nbaGames.isEmpty && nbaError == null)
         _empty('No hay partidos en la ventana actual. Vuelve a actualizar más tarde.'),
 
-      if (_latestCompletedSlateGames.isEmpty)
-        _empty('Todavía no hay una jornada completamente finalizada en los datos recientes.')
-      else
-        ..._latestCompletedSlateGames.map(_nbaGameCard),
-      const SizedBox(height: 8),
-      _section(_nextSlateDate == null
-          ? 'Próxima jornada'
-          : 'Próxima jornada · ${_formatSlateDate(_nextSlateDate!)}'),
+      _section('Jornada actual'),
       if (_nextSlateGames.isEmpty)
         _empty('No hay partidos programados en la próxima jornada.')
       else
@@ -780,6 +769,9 @@ class _HomeScreenState extends State<HomeScreen> {
     child: ListView(padding: const EdgeInsets.all(16), children: [
       _previousSlateSection(),
       const Divider(height: 28),
+      Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFF0E5), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE8C9B8))),
+        child: const Text('RESUMEN DE HISTORIAL DE PREDICCIONES', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B)))),
+      const SizedBox(height: 10),
       _section('Historial automático en la nube'),
       const Text('Los pronósticos guardados por el motor se conservan con su versión y datos de entrada. Cuando llega el resultado final, se calcula su error sin modificar el pronóstico original.'),
       const SizedBox(height: 8),
@@ -978,6 +970,13 @@ class _HomeScreenState extends State<HomeScreen> {
           title: Text(v), subtitle: Text('${subset.length} partidos evaluados · ${subset.isEmpty ? 0 : (100*hits/subset.length).toStringAsFixed(1)}% de acierto'),
         ));
       }),
+      const SizedBox(height: 12),
+      Card(color: const Color(0xFFFFF0E5), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xFFE8C9B8))),
+        child: const Padding(padding: EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('LABORATORIO DE APRENDIZAJE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFFB94D2B))),
+          SizedBox(height: 8), Text('La APK registra predicciones, espera resultados finales, calcula errores de marcador y ganador, y compara versiones del modelo con datos históricos.'),
+          SizedBox(height: 8), Text('No se activa una mejora automáticamente si no demuestra resultados consistentes en evaluaciones temporales.', style: TextStyle(fontWeight: FontWeight.w700)),
+        ]))),
       const SizedBox(height: 12),
       const Text('Próxima etapa: ampliar el historial validado, comparar nuevos candidatos mediante pruebas temporales y promover un modelo solo cuando demuestre una mejora consistente.'),
     ]);
