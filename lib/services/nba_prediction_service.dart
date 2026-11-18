@@ -77,9 +77,13 @@ class NbaPredictionService {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
+        // The Android client is read-only. Immutable snapshots and settlement
+        // are owned by the scheduled Supabase gate, never by a screen refresh.
+        // This keeps UI polling from attempting writes while the backend's
+        // persistence safety lock is active.
         final response = await Supabase.instance.client.functions.invoke(
           'nba-predictions',
-          body: const {'persist': true},
+          body: const {'persist': false},
         );
         if (response.status < 200 || response.status >= 300) {
           throw Exception('El motor de predicciones respondió con código ${response.status}');
