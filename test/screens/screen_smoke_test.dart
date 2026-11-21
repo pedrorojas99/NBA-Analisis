@@ -35,7 +35,7 @@ void main() {
   });
 
   testWidgets('Home screen mounts with the NBA Analytics shell', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeScreen(enableLivePolling: false)));
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen(enableLivePolling: false, enableInitialLoad: false)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('NBA ANALYTICS'), findsOneWidget);
@@ -86,7 +86,7 @@ void main() {
       homeTeam: home,
       awayTeam: away,
     );
-    await tester.pumpWidget(MaterialApp(home: GameAnalysisScreen(game: game)));
+    await tester.pumpWidget(MaterialApp(home: GameAnalysisScreen(game: game, enableDataLoading: false)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('Análisis del partido'), findsOneWidget);
