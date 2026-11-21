@@ -481,10 +481,13 @@ Deno.serve(async (req: Request) => {
         if (savedError) throw new Error("Player predictions for evaluation failed: " + savedError.message);
         settlementDiagnostics.saved_forecasts = (saved ?? []).length;
         const actualRows: any[] = [];
-        for (let offset = 0; offset < recentFinalIds.length; offset += 100) {
+        // Query only games that actually have saved player forecasts. This avoids
+        // losing matches when a large recent-final slate is paged independently.
+        const savedGameIds = [...new Set((saved ?? []).map((p: any) => p.game_id).filter(Boolean))];
+        for (let offset = 0; offset < savedGameIds.length; offset += 100) {
           const { data, error } = await supabase.from("player_game_stats")
             .select("game_id,player_id,stats,validation_status,captured_at")
-            .in("game_id", recentFinalIds.slice(offset, offset + 100))
+            .in("game_id", savedGameIds.slice(offset, offset + 100))
             .eq("validation_status", "validated")
             .order("captured_at", { ascending: false });
           if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
