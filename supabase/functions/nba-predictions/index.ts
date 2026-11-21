@@ -63,27 +63,27 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Unauthorized" }, 401);
   }
   if (!SERVICE_KEY) return json({ ok: false, error: "Server database credentials are not configured" }, 500);
+  const supabase = createClient(PROJECT_URL, SERVICE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  let requestBody: any = {};
+  try { requestBody = await req.json(); } catch { /* empty body is read-only */ }
+  const requested = requestBody?.persist === true;
   let persistRequested = false;
-  try {
-    const body = await req.json();
-    const requested = body?.persist === true;
+  if (requested) {
     const automationToken = req.headers.get("x-automation-token") ?? "";
     const automationHash = automationToken ? await sha256(automationToken) : "";
     const { data: automationRecord, error: automationError } = await supabase
       .from("internal_automation_tokens").select("token_hash").eq("name", "nba-slate-gate").maybeSingle();
-    const automationAuthorized = !automationError && !!automationRecord?.token_hash &&
-      automationHash === automationRecord.token_hash;
-    if (requested && !automationAuthorized) {
+    if (automationError) {
+      return json({ ok: false, error: "Could not validate server automation authorization." }, 503);
+    }
+    const automationAuthorized = !!automationRecord?.token_hash && automationHash === automationRecord.token_hash;
+    if (!automationAuthorized) {
       return json({ ok: false, error: "Persistence is restricted to authorized server automation." }, 403);
     }
-    persistRequested = requested && automationAuthorized;
-  } catch {
-    // Empty bodies preserve read-only behavior for older clients.
+    persistRequested = true;
   }
-
-  const supabase = createClient(PROJECT_URL, SERVICE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   try {
     const now = new Date();
