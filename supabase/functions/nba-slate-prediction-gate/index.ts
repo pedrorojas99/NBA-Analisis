@@ -32,7 +32,7 @@ Deno.serve(async(req:Request)=>{
   const completed=slates.filter(s=>s.date<=dateKey(nowIso)&&s.all_final).at(-1)??null;
   const calls:any[]=[];
   for(const slug of ["nba-predictions","nba-player-predictions"]){
-    const resp=await fetch(PROJECT_URL+"/functions/v1/"+slug,{method:"POST",headers:{"Content-Type":"application/json","apikey":PUBLIC_KEY,"Authorization":`Bearer ${SERVICE_KEY}`},body:JSON.stringify({persist:true,trigger:"scheduled_settlement_and_forecast",requested_at:nowIso})});
+    const resp=await fetch(PROJECT_URL+"/functions/v1/"+slug,{method:"POST",headers:{"Content-Type":"application/json","apikey":PUBLIC_KEY,"x-automation-token":suppliedToken},body:JSON.stringify({persist:true,trigger:"scheduled_settlement_and_forecast",requested_at:nowIso})});
     let body:any;try{body=await resp.json();}catch{body={text:await resp.text()};}
     calls.push({function:slug,http_status:resp.status,ok:resp.ok,result:body});
     if(!resp.ok)break;
