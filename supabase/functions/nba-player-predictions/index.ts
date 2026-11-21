@@ -26,6 +26,13 @@ function valuesFromStats(stats: any): Record<string, unknown> {
     if (category?.values && typeof category.values === "object") Object.assign(values, category.values);
   }
   if (stats?.values && typeof stats.values === "object") Object.assign(values, stats.values);
+  // ESPN's persisted player_game_stats rows often store boxscore fields directly
+  // (MIN, PTS, REB, AST, 3PT), not under categories/values.
+  if (stats && typeof stats === "object" && !Array.isArray(stats)) {
+    for (const [key, value] of Object.entries(stats)) {
+      if ((typeof value === "string" || typeof value === "number") && !(key in values)) values[key] = value;
+    }
+  }
   return values;
 }
 
@@ -96,7 +103,15 @@ Deno.serve(async (req: Request) => {
   if (!SERVICE_KEY) return json({ ok: false, error: "Server database credentials are not configured" }, 500);
 
   let persistRequested = false;
-  try { persistRequested = (await req.json())?.persist === true; } catch { /* read-only default */ }
+  try {
+    const body = await req.json();
+    const requested = body?.persist === true;
+    const automationAuthorized = req.headers.get("authorization") === `Bearer ${SERVICE_KEY}`;
+    if (requested && !automationAuthorized) {
+      return json({ ok: false, error: "Persistence is restricted to authorized server automation." }, 403);
+    }
+    persistRequested = requested && automationAuthorized;
+  } catch { /* read-only default */ }
 
   const supabase = createClient(PROJECT_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
@@ -457,16 +472,19 @@ Deno.serve(async (req: Request) => {
         const actualRows: any[] = [];
         for (let offset = 0; offset < recentFinalIds.length; offset += 100) {
           const { data, error } = await supabase.from("player_game_stats")
-            .select("game_id,player_id,stats,validation_status")
+            .select("game_id,player_id,stats,validation_status,captured_at")
             .in("game_id", recentFinalIds.slice(offset, offset + 100))
-            .neq("validation_status", "rejected");
+            .eq("validation_status", "validated")
+            .order("captured_at", { ascending: false });
           if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
           actualRows.push(...(data ?? []));
         }
         const actualMap = new Map<string, any>();
         for (const row of actualRows) {
           const parsed = normalizedStatRow(row.stats);
-          if (parsed) actualMap.set(`${row.game_id}:${row.player_id}`, parsed);
+          const key = `${row.game_id}:${row.player_id}`;
+          // Rows are newest-first; retain one validated final boxscore per player/game.
+          if (parsed && !actualMap.has(key)) actualMap.set(key, parsed);
         }
         const savedIds = (saved ?? []).map((p: any) => p.id);
         const existingEvalIds = new Set<string>();
