@@ -39,6 +39,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('NBA ANALYTICS'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Search hub exposes player and team tabs', (tester) async {
@@ -46,20 +47,23 @@ void main() {
     await tester.pump();
     expect(find.text('Jugadores'), findsOneWidget);
     expect(find.text('Equipos'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Player statistics screen mounts and handles unavailable backend', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: PlayerStatsScreen()));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.text('Estadísticas de jugadores'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Team statistics screen mounts and handles unavailable backend', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: TeamStatsScreen()));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(Scaffold), findsOneWidget);
+    expect(find.text('Buscar equipos NBA'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Team roster screen mounts and handles unavailable backend', (tester) async {
@@ -69,6 +73,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Boston Celtics'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Game analysis screen mounts for a regular NBA fixture', (tester) async {
@@ -86,6 +91,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('Análisis del partido'), findsOneWidget);
     expect(find.text('New York Knicks vs Boston Celtics'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Matchup card renders a forecast without head-to-head data', (tester) async {
@@ -113,5 +119,6 @@ void main() {
     await tester.pump();
     expect(find.text('Boston Celtics'), findsWidgets);
     expect(find.textContaining('112'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
