@@ -74,7 +74,7 @@ void main() {
   testWidgets('Game analysis screen mounts for a regular NBA fixture', (tester) async {
     const home = NbaTeam(id: 'bos', name: 'Boston Celtics', abbreviation: 'BOS');
     const away = NbaTeam(id: 'nyk', name: 'New York Knicks', abbreviation: 'NYK');
-    const game = NbaGame(
+    final game = NbaGame(
       id: 'game-2',
       scheduledStart: DateTime.utc(2026, 11, 21, 18),
       status: 'scheduled',
@@ -89,7 +89,7 @@ void main() {
   });
 
   testWidgets('Matchup card renders a forecast without head-to-head data', (tester) async {
-    const forecast = NbaForecast(
+    final forecast = NbaForecast(
       gameId: 'game-3',
       scheduledStart: DateTime.utc(2026, 11, 21, 18),
       homeTeam: 'Boston Celtics',
