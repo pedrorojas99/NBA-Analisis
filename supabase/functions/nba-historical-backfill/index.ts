@@ -5,7 +5,13 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
-function normalizeTeamAbbr(value: unknown) { const abbr = String(value ?? "").toUpperCase(); return abbr === "GS" ? "GSW" : abbr; }
+const NBA_TEAM_ABBREVIATIONS = new Set(["ATL","BKN","BOS","CHA","CHI","CLE","DAL","DEN","DET","GSW","HOU","IND","LAC","LAL","MEM","MIA","MIL","MIN","NOP","NYK","OKC","ORL","PHI","PHX","POR","SAC","SAS","TOR","UTA","WAS"]);
+function normalizeTeamAbbr(value: unknown) {
+  const abbr = String(value ?? "").toUpperCase();
+  const aliases: Record<string, string> = { GS: "GSW", NY: "NYK", NO: "NOP", SA: "SAS", UTAH: "UTA", WSH: "WAS" };
+  return aliases[abbr] ?? abbr;
+}
+function isNbaTeamAbbr(value: unknown) { return NBA_TEAM_ABBREVIATIONS.has(normalizeTeamAbbr(value)); }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function fetchEspn(url: string, userAgent: string, attempts = 4): Promise<Response> {
@@ -106,7 +112,7 @@ Deno.serve(async (req: Request) => {
     runId = run.id;
     await supabase.from("historical_backfill_jobs").update({ status: "running", updated_at: startedAt, last_error: null }).eq("id", job.id);
 
-    const { count: teamsSynced, error: teamsCountError } = await supabase.from("teams").select("id", { count: "exact", head: true });
+    const { count: teamsSynced, error: teamsCountError } = await supabase.from("teams").select("id", { count: "exact", head: true }).eq("team_type", "nba");
     if (teamsCountError || (teamsSynced ?? 0) < 30) throw new Error(`Expected at least 30 registered NBA teams, found ${teamsSynced ?? 0}`);
 
     // Retry previously missed boxscores with the secondary NBA feed before processing new dates.
@@ -141,7 +147,7 @@ Deno.serve(async (req: Request) => {
         for (const item of [home, away]) {
           const team = item.team;
           const abbreviation = normalizeTeamAbbr(team.abbreviation);
-          const row = { abbreviation, display_name: String(team.displayName ?? team.name ?? abbreviation), city: team.location ?? null };
+          const row = { abbreviation, display_name: String(team.displayName ?? team.name ?? abbreviation), city: team.location ?? null, team_type: isNbaTeamAbbr(abbreviation) ? "nba" : "special" };
           const { data: savedTeam, error } = await supabase.from("teams").upsert(row, { onConflict: "abbreviation" }).select("id").single();
           if (error || !savedTeam) throw new Error("Game team upsert failed: " + error?.message);
           teamIds[abbreviation] = savedTeam.id;
@@ -156,7 +162,8 @@ Deno.serve(async (req: Request) => {
           season: seasonYear(event.date), scheduled_start: new Date(event.date).toISOString(),
           home_team_id: teamIds[homeAbbr], away_team_id: teamIds[awayAbbr], status: "final",
           status_detail: event.status?.type?.detail ?? "Final",
-          is_neutral_site: Boolean(event.competitions?.[0]?.neutralSite)
+          is_neutral_site: Boolean(event.competitions?.[0]?.neutralSite),
+          is_special_event: !(isNbaTeamAbbr(homeAbbr) && isNbaTeamAbbr(awayAbbr))
         };
         const { data: existingMap, error: lookupError } = await supabase.from("game_source_ids")
           .select("game_id").eq("source_name", "espn").eq("source_game_id", String(event.id)).maybeSingle();
