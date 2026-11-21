@@ -6,7 +6,7 @@ const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_K
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const teamLogoSlug = (value: unknown) => {
   const abbr = String(value ?? "").toUpperCase();
-  const aliases: Record<string, string> = { GSW: "gs", NY: "ny", NO: "no", SA: "sa", UTAH: "utah" };
+  const aliases: Record<string, string> = { GSW: "gs", NYK: "ny", NOP: "no", SAS: "sa", UTA: "utah", WAS: "wsh" };
   return aliases[abbr] ?? abbr.toLowerCase();
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -21,9 +21,9 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     if (body?.action === "team_stats") {
       const { data: teamRows, error: teamError } = await supabase.from("teams")
-        .select("id,abbreviation,display_name,city").order("display_name", { ascending: true });
+        .select("id,abbreviation,display_name,city,team_type").eq("team_type", "nba").order("display_name", { ascending: true });
       if (teamError) throw new Error("Team catalog query failed: " + teamError.message);
-      const teamsOut = (teamRows ?? []).filter((team: any) => team.abbreviation !== "TBD").map((team: any) => ({
+      const teamsOut = (teamRows ?? []).map((team: any) => ({
         ...team,
         logo_url: `https://a.espncdn.com/i/teamlogos/nba/500/${teamLogoSlug(team.abbreviation)}.png`
       }));
@@ -34,6 +34,7 @@ Deno.serve(async (req: Request) => {
       const nowIso = new Date().toISOString();
       const { data: teamGames, error: gamesError } = await supabase.from("games")
         .select("id,season,scheduled_start,home_team_id,away_team_id")
+        .eq("is_special_event", false)
         .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
         .lt("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(500);
       if (gamesError) throw new Error("Team history query failed: " + gamesError.message);
@@ -88,7 +89,7 @@ Deno.serve(async (req: Request) => {
       const gameId = typeof body?.game_id === "string" ? body.game_id : "";
       if (!gameId) return json({ ok: false, error: "Se requiere game_id." }, 400);
       const [{ data: game, error: gameError }, { data: teamRows, error: teamError }, { data: playerRows, error: playerError }] = await Promise.all([
-        supabase.from("games").select("id,scheduled_start,status,home_team_id,away_team_id").eq("id", gameId).maybeSingle(),
+        supabase.from("games").select("id,scheduled_start,status,home_team_id,away_team_id,is_special_event").eq("id", gameId).eq("is_special_event", false).maybeSingle(),
         supabase.from("team_game_stats").select("team_id,stats,validation_status,captured_at").eq("game_id", gameId).neq("validation_status", "rejected").order("captured_at", { ascending: false }),
         supabase.from("player_game_stats").select("player_id,team_id,stats,validation_status,captured_at").eq("game_id", gameId).neq("validation_status", "rejected").order("captured_at", { ascending: false })
       ]);
@@ -99,7 +100,7 @@ Deno.serve(async (req: Request) => {
       const teamIds = [...new Set([game.home_team_id, game.away_team_id])];
       const playerIds = [...new Set((playerRows ?? []).map((row: any) => row.player_id))];
       const [{ data: teams, error: teamsError }, { data: players, error: playersError }] = await Promise.all([
-        supabase.from("teams").select("id,display_name,abbreviation").in("id", teamIds),
+        supabase.from("teams").select("id,display_name,abbreviation,team_type").in("id", teamIds).eq("team_type", "nba"),
         playerIds.length ? supabase.from("players").select("id,display_name").in("id", playerIds) : Promise.resolve({ data: [], error: null })
       ]);
       if (teamsError) throw new Error("Game teams lookup failed: " + teamsError.message);
@@ -129,13 +130,14 @@ Deno.serve(async (req: Request) => {
       const nowIso = new Date().toISOString();
       const { data: games, error: gamesError } = await supabase.from("games")
         .select("id,scheduled_start,home_team_id,away_team_id")
+        .eq("is_special_event", false)
         .or(`and(home_team_id.eq.${homeId},away_team_id.eq.${awayId}),and(home_team_id.eq.${awayId},away_team_id.eq.${homeId})`)
         .lt("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(30);
       if (gamesError) throw new Error("Head-to-head games query failed: " + gamesError.message);
       const ids = (games ?? []).map((game: any) => game.id);
       const [{ data: results, error: resultsError }, { data: teamRows, error: teamsError }] = await Promise.all([
         ids.length ? supabase.from("game_results").select("game_id,home_score,away_score,is_final").in("game_id", ids).eq("is_final", true) : Promise.resolve({ data: [], error: null }),
-        supabase.from("teams").select("id,display_name,abbreviation").in("id", [homeId, awayId])
+        supabase.from("teams").select("id,display_name,abbreviation,team_type").in("id", [homeId, awayId]).eq("team_type", "nba")
       ]);
       if (resultsError) throw new Error("Head-to-head results query failed: " + resultsError.message);
       if (teamsError) throw new Error("Head-to-head teams query failed: " + teamsError.message);
@@ -160,6 +162,11 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, games: meetings, meta: { returned: meetings.length, requested: 10 } });
     }
     if (body?.action === "player_stats") {
+      // Only official NBA team performances feed individual averages; special-event rows remain stored separately.
+      const { data: nbaTeams, error: nbaTeamsError } = await supabase.from("teams").select("id").eq("team_type", "nba");
+      if (nbaTeamsError) throw new Error("NBA team catalog query failed: " + nbaTeamsError.message);
+      const nbaTeamIds = (nbaTeams ?? []).map((team: any) => team.id);
+      if (!nbaTeamIds.length) throw new Error("No official NBA teams are configured.");
       // PostgREST may cap responses at 1,000 rows even when a larger limit is requested.
       // Page through the full eligible stats index so players beyond the first page are not omitted.
       const statIndex: any[] = [];
@@ -167,6 +174,7 @@ Deno.serve(async (req: Request) => {
       for (let offset = 0; ; offset += pageSize) {
         const { data, error: indexError } = await supabase
           .from("player_game_stats").select("player_id,game_id")
+          .in("team_id", nbaTeamIds)
           .or("validation_status.is.null,validation_status.neq.rejected")
           .order("player_id", { ascending: true }).order("game_id", { ascending: true })
           .range(offset, offset + pageSize - 1);
@@ -202,6 +210,7 @@ Deno.serve(async (req: Request) => {
           .from("player_game_stats")
           .select("game_id,player_id,team_id,stats,captured_at")
           .eq("player_id", playerId)
+          .in("team_id", nbaTeamIds)
           .or("validation_status.is.null,validation_status.neq.rejected")
           .order("captured_at", { ascending: false }).limit(300);
         if (rowsError) throw new Error("Selected player stats query failed: " + rowsError.message);
@@ -211,12 +220,12 @@ Deno.serve(async (req: Request) => {
         const { data: gameRows, error: gameError } = gameIds.length
           ? await supabase.from("games")
               .select("id,season,scheduled_start,home_team_id,away_team_id,status")
-              .in("id", gameIds)
+              .in("id", gameIds).eq("is_special_event", false)
           : { data: [], error: null };
         if (gameError) throw new Error("Player games query failed: " + gameError.message);
         const teamIds = [...new Set((gameRows ?? []).flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
         const { data: teamRows, error: teamError } = teamIds.length
-          ? await supabase.from("teams").select("id,abbreviation,display_name").in("id", teamIds)
+          ? await supabase.from("teams").select("id,abbreviation,display_name,team_type").in("id", teamIds).eq("team_type", "nba")
           : { data: [], error: null };
         if (teamError) throw new Error("Player teams query failed: " + teamError.message);
         const gameById = new Map((gameRows ?? []).map((g: any) => [g.id, g]));
@@ -252,13 +261,13 @@ Deno.serve(async (req: Request) => {
       const to = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data: games, error: gamesError } = await supabase.from("games")
         .select("id,season,scheduled_start,status,status_detail,home_team_id,away_team_id,is_neutral_site")
-        .gte("scheduled_start", from).lte("scheduled_start", to)
+        .gte("scheduled_start", from).lte("scheduled_start", to).eq("is_special_event", false)
         .order("scheduled_start", { ascending: true }).limit(40);
       if (gamesError) throw new Error("Live games query failed: " + gamesError.message);
       const teamIds = [...new Set((games ?? []).flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
       const gameIds = (games ?? []).map((g: any) => g.id);
       const [{ data: teams, error: teamsError }, { data: results, error: resultsError }, { data: mappings, error: mappingsError }] = await Promise.all([
-        teamIds.length ? supabase.from("teams").select("id,abbreviation,display_name,city").in("id", teamIds) : Promise.resolve({ data: [], error: null }),
+        teamIds.length ? supabase.from("teams").select("id,abbreviation,display_name,city,team_type").in("id", teamIds).eq("team_type", "nba") : Promise.resolve({ data: [], error: null }),
         gameIds.length ? supabase.from("game_results").select("game_id,home_score,away_score,is_final,confirmed_at").in("game_id", gameIds) : Promise.resolve({ data: [], error: null }),
         gameIds.length ? supabase.from("game_source_ids").select("game_id,source_game_id").eq("source_name", "espn").in("game_id", gameIds) : Promise.resolve({ data: [], error: null })
       ]);
@@ -302,13 +311,13 @@ Deno.serve(async (req: Request) => {
     const to = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: games, error: gamesError } = await supabase.from("games")
       .select("id,season,scheduled_start,status,status_detail,home_team_id,away_team_id,is_neutral_site")
-      .gte("scheduled_start", from).lte("scheduled_start", to)
+      .gte("scheduled_start", from).lte("scheduled_start", to).eq("is_special_event", false)
       .order("scheduled_start", { ascending: true }).limit(40);
     if (gamesError) throw new Error("Games query failed: " + gamesError.message);
     const teamIds = [...new Set((games ?? []).flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
     const gameIds = (games ?? []).map((g: any) => g.id);
     const [{ data: teams, error: teamsError }, { data: results, error: resultsError }, { data: mappings, error: mappingsError }] = await Promise.all([
-      supabase.from("teams").select("id,abbreviation,display_name,city").in("id", teamIds),
+      supabase.from("teams").select("id,abbreviation,display_name,city,team_type").in("id", teamIds).eq("team_type", "nba"),
       gameIds.length ? supabase.from("game_results").select("game_id,home_score,away_score,is_final,confirmed_at").in("game_id", gameIds) : Promise.resolve({ data: [], error: null }),
       gameIds.length ? supabase.from("game_source_ids").select("game_id,source_game_id").eq("source_name", "espn").in("game_id", gameIds) : Promise.resolve({ data: [], error: null })
     ]);

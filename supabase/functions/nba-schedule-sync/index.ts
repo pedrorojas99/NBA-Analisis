@@ -7,7 +7,13 @@ const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY")
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const monthKey = (date: Date) => `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-const normalizeAbbr = (value: unknown) => { const abbr = String(value ?? "").toUpperCase(); return abbr === "GS" ? "GSW" : abbr; };
+const NBA_TEAM_ABBREVIATIONS = new Set(["ATL","BKN","BOS","CHA","CHI","CLE","DAL","DEN","DET","GSW","HOU","IND","LAC","LAL","MEM","MIA","MIL","MIN","NOP","NYK","OKC","ORL","PHI","PHX","POR","SAC","SAS","TOR","UTA","WAS"]);
+function normalizeAbbr(value: unknown) {
+  const abbr = String(value ?? "").toUpperCase();
+  const aliases: Record<string, string> = { GS: "GSW", NY: "NYK", NO: "NOP", SA: "SAS", UTAH: "UTA", WSH: "WAS" };
+  return aliases[abbr] ?? abbr;
+}
+function isNbaTeamAbbr(value: unknown) { return NBA_TEAM_ABBREVIATIONS.has(normalizeAbbr(value)); }
 const chunks = <T>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
 
 Deno.serve(async (req: Request) => {
@@ -40,6 +46,7 @@ Deno.serve(async (req: Request) => {
         abbreviation: normalizeAbbr(team.abbreviation),
         display_name: String(team.displayName ?? team.name ?? team.abbreviation),
         city: team.location ?? null,
+        team_type: "nba",
       }, { onConflict: "abbreviation" }).select("id,abbreviation").single();
       if (error || !data) throw new Error(`Team upsert failed: ${error?.message}`);
       return { ...data, sourceId: String(team.id) };
@@ -80,6 +87,7 @@ Deno.serve(async (req: Request) => {
           home_team_id: homeTeam.id, away_team_id: awayTeam.id, status: "scheduled",
           status_detail: event.status?.type?.detail ?? "Scheduled",
           is_neutral_site: Boolean(event.competitions?.[0]?.neutralSite),
+          is_special_event: false,
         },
       });
     }

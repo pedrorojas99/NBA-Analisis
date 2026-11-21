@@ -8,7 +8,8 @@ import 'matchup_prediction_card.dart';
 
 class GameAnalysisScreen extends StatefulWidget {
   final NbaGame game;
-  const GameAnalysisScreen({super.key, required this.game});
+  final bool enableDataLoading;
+  const GameAnalysisScreen({super.key, required this.game, this.enableDataLoading = true});
 
   @override
   State<GameAnalysisScreen> createState() => _GameAnalysisScreenState();
@@ -28,8 +29,8 @@ class _GameAnalysisScreenState extends State<GameAnalysisScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
-    if (widget.game.status == 'in_progress') {
+    if (widget.enableDataLoading) _load();
+    if (widget.enableDataLoading && widget.game.status == 'in_progress') {
       _liveStatsTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refreshLiveStats());
     }
   }
