@@ -12,6 +12,8 @@ Deno.serve(async(req:Request)=>{
  if(!SERVICE_KEY)return json({ok:false,error:"Server credentials unavailable"},500);
  const db=createClient(PROJECT_URL,SERVICE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
  try{
+  const {data:automationSecret,error:secretError}=await db.schema("vault").from("decrypted_secrets").select("decrypted_secret").eq("name","nba_prediction_automation_token").maybeSingle();
+  if(secretError||!automationSecret?.decrypted_secret||req.headers.get("authorization")!==`Bearer ${automationSecret.decrypted_secret}`)return json({ok:false,error:"Scheduled automation only"},403);
   const now=new Date(),nowIso=now.toISOString(),start=new Date(now.getTime()-10*86400000).toISOString(),end=new Date(now.getTime()+21*86400000).toISOString();
   const {data:games,error}=await db.from("games").select("id,scheduled_start,status,home_team_id,away_team_id").gte("scheduled_start",start).lte("scheduled_start",end).order("scheduled_start").limit(500);if(error)throw error;
   const grouped=new Map<string,any[]>();for(const g of games??[]){const k=dateKey(g.scheduled_start);if(!grouped.has(k))grouped.set(k,[]);grouped.get(k)!.push(g);}
