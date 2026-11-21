@@ -81,7 +81,7 @@ void main() {
       homeTeam: home,
       awayTeam: away,
     );
-    await tester.pumpWidget(const MaterialApp(home: GameAnalysisScreen(game: game)));
+    await tester.pumpWidget(MaterialApp(home: GameAnalysisScreen(game: game)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('Análisis del partido'), findsOneWidget);
