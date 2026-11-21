@@ -35,7 +35,7 @@ void main() {
   });
 
   testWidgets('Home screen mounts with the NBA Analytics shell', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen(enableLivePolling: false)));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     expect(find.text('NBA ANALYTICS'), findsOneWidget);
@@ -51,7 +51,7 @@ void main() {
   });
 
   testWidgets('Player statistics screen mounts and handles unavailable backend', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: PlayerStatsScreen()));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: PlayerStatsScreen())));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Estadísticas de jugadores'), findsOneWidget);
@@ -59,7 +59,7 @@ void main() {
   });
 
   testWidgets('Team statistics screen mounts and handles unavailable backend', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: TeamStatsScreen()));
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: TeamStatsScreen())));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('Buscar equipos NBA'), findsOneWidget);
