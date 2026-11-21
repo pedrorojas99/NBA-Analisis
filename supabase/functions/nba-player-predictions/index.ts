@@ -142,11 +142,8 @@ Deno.serve(async (req: Request) => {
 
     const teamIds = [...new Set(slateGames.flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
     const gameIds = slateGames.map((g: any) => g.id);
-    if (!gameIds.length) return json({
-      ok: true, model: { version: MODEL_VERSION, status: "experimental" },
-      slate_date: null, slate_status: slateStatus, player_forecasts: [], skipped: [],
-      meta: { games_checked: 0, player_forecasts: 0, predictions_persisted: 0, predictions_evaluated: 0 },
-    });
+    // Do not return early when there is no upcoming slate: pending player
+    // forecasts from recently completed games must still be settled below.
 
     const [{ data: teamMappings, error: teamMapError }, { data: modelRows, error: modelError }] = await Promise.all([
       supabase.from("team_source_ids").select("team_id,source_team_id").eq("source_name", "espn").in("team_id", teamIds),
