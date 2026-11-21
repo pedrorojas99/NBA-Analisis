@@ -499,6 +499,7 @@ Deno.serve(async (req: Request) => {
           if (parsed && !actualMap.has(key)) actualMap.set(key, parsed);
         }
         settlementDiagnostics.normalized_stats = actualMap.size;
+        settlementKeySamples.actual = [...actualMap.keys()].slice(0, 5);
         const savedIds = (saved ?? []).map((p: any) => p.id);
         const existingEvalIds = new Set<string>();
         for (let offset = 0; offset < savedIds.length; offset += 100) {
@@ -507,6 +508,11 @@ Deno.serve(async (req: Request) => {
           if (error) throw new Error("Existing player evaluations lookup failed: " + error.message);
           for (const row of data ?? []) existingEvalIds.add(row.prediction_id);
         }
+        settlementKeySamples.saved = (saved ?? []).slice(0, 5).map((p: any) => ({
+          game_id: p.game_id,
+          player_id: p.forecast?.player_id,
+          forecast_is_string: typeof p.forecast === "string",
+        }));
         const evalRows: any[] = [];
         for (const prediction of saved ?? []) {
           if (existingEvalIds.has(prediction.id)) continue;
@@ -559,6 +565,7 @@ Deno.serve(async (req: Request) => {
         predictions_evaluated: predictionsEvaluated,
         persistence_requested: persistRequested,
         settlement_diagnostics: settlementDiagnostics,
+        settlement_key_samples: settlementKeySamples,
       },
     });
   } catch (error) {
