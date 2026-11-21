@@ -462,11 +462,6 @@ Deno.serve(async (req: Request) => {
     // Settle pending player forecasts independently of the current upcoming slate.
     // The previous implementation only inspected slateGames (the next non-final date),
     // so completed games disappeared from that list before this evaluator could see them.
-    const settlementDiagnostics: Record<string, number> = {
-      final_games: 0, saved_forecasts: 0, stats_rows: 0, normalized_stats: 0,
-      forecasts_with_actual: 0, evaluation_rows: 0, inserted_evaluations: 0,
-    };
-    const settlementKeySamples: Record<string, unknown> = { saved: [], actual: [] };
     if (persistRequested) {
       const settlementFrom = new Date(now.getTime() - 14 * 86400000).toISOString();
       const { data: recentFinalGames, error: finalGamesError } = await supabase.from("games")
@@ -474,12 +469,10 @@ Deno.serve(async (req: Request) => {
         .lte("scheduled_start", nowIso).order("scheduled_start", { ascending: false }).limit(300);
       if (finalGamesError) throw new Error("Recent final games lookup failed: " + finalGamesError.message);
       const recentFinalIds = (recentFinalGames ?? []).map((g: any) => g.id);
-      settlementDiagnostics.final_games = recentFinalIds.length;
       if (recentFinalIds.length) {
         const { data: saved, error: savedError } = await supabase.from("predictions")
           .select("id,game_id,forecast").in("game_id", recentFinalIds).eq("prediction_type", "player");
         if (savedError) throw new Error("Player predictions for evaluation failed: " + savedError.message);
-        settlementDiagnostics.saved_forecasts = (saved ?? []).length;
         const actualRows: any[] = [];
         // Query only games that actually have saved player forecasts. This avoids
         // losing matches when a large recent-final slate is paged independently.
@@ -493,7 +486,6 @@ Deno.serve(async (req: Request) => {
           if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
           actualRows.push(...(data ?? []));
         }
-        settlementDiagnostics.stats_rows = actualRows.length;
         const actualMap = new Map<string, any>();
         const normalizeId = (value: unknown) => String(value ?? "").trim().toLowerCase();
         for (const row of actualRows) {
@@ -502,8 +494,6 @@ Deno.serve(async (req: Request) => {
           // Rows are newest-first; retain one validated final boxscore per player/game.
           if (parsed && !actualMap.has(key)) actualMap.set(key, parsed);
         }
-        settlementDiagnostics.normalized_stats = actualMap.size;
-        settlementKeySamples.actual = [...actualMap.keys()].slice(0, 5);
         const savedIds = (saved ?? []).map((p: any) => p.id);
         const existingEvalIds = new Set<string>();
         for (let offset = 0; offset < savedIds.length; offset += 100) {
@@ -512,12 +502,6 @@ Deno.serve(async (req: Request) => {
           if (error) throw new Error("Existing player evaluations lookup failed: " + error.message);
           for (const row of data ?? []) existingEvalIds.add(row.prediction_id);
         }
-        settlementKeySamples.saved = (saved ?? []).slice(0, 5).map((p: any) => {
-          const raw = p.forecast ?? {};
-          const f = typeof raw === "string" ? JSON.parse(raw) : raw;
-          const key = `${normalizeId(p.game_id ?? f.game_id)}:${normalizeId(f.player_id ?? f.playerId)}`;
-          return { key, has_actual: actualMap.has(key), game_id: p.game_id, player_id: f.player_id };
-        });
         const evalRows: any[] = [];
         for (const prediction of saved ?? []) {
           if (existingEvalIds.has(prediction.id)) continue;
@@ -527,7 +511,6 @@ Deno.serve(async (req: Request) => {
           const matchPlayerId = normalizeId(forecast.player_id ?? forecast.playerId);
           const actual = actualMap.get(`${matchGameId}:${matchPlayerId}`);
           if (!actual) continue; // DNP / missing validated boxscore: keep pending, never invent zeroes.
-          settlementDiagnostics.forecasts_with_actual += 1;
           const fields = ["points", "rebounds", "assists", "threes", "minutes"];
           const errorMetrics: Record<string, number> = {};
           for (const field of fields) {
@@ -541,14 +524,12 @@ Deno.serve(async (req: Request) => {
             result_source_names: ["espn"],
           });
         }
-        settlementDiagnostics.evaluation_rows = evalRows.length;
         for (let offset = 0; offset < evalRows.length; offset += 50) {
           const { data, error } = await supabase.from("prediction_evaluations").upsert(evalRows.slice(offset, offset + 50), {
             onConflict: "prediction_id", ignoreDuplicates: true,
           }).select("id");
           if (error) throw new Error("Player evaluations persistence failed: " + error.message);
           predictionsEvaluated += data?.length ?? 0;
-          settlementDiagnostics.inserted_evaluations += data?.length ?? 0;
         }
       }
     }
@@ -569,8 +550,6 @@ Deno.serve(async (req: Request) => {
         predictions_persisted: predictionsPersisted,
         predictions_evaluated: predictionsEvaluated,
         persistence_requested: persistRequested,
-        settlement_diagnostics: settlementDiagnostics,
-        settlement_key_samples: settlementKeySamples,
       },
     });
   } catch (error) {
