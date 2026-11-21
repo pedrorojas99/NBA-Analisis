@@ -85,4 +85,4 @@ Counts may increase as the historical job advances. Current live data and histor
 - Games involving a special team are marked is_special_event = true; mobile scoreboard, team history, head-to-head, and player-stat APIs now read only official NBA games/teams.
 - Audit found 5 special games already stored; these remain preserved and excluded from NBA averages/predictions.
 - Season 2025-26 has 1,330 stored games (including postseason/special categories); season 2026-27 has 542 fixtures/results in the current database snapshot.
-- 2024-25 was NOT fully backfilled: only the first 7 dates (52 games) had been processed. The existing resumable job has been re-queued from 2024-10-29 through 2025-06-30 at 2 dates per run. Cron will continue it; completion is pending and must be verified from the cursor and per-season counts.
+- 2024-25 was NOT fully backfilled: only the first 7 dates (52 games) had been processed. The existing resumable job has been re-queued from 2024-10-22 through 2025-06-30 at 2 dates per run. Cron will continue it; completion is pending and must be verified from the cursor and per-season counts.
