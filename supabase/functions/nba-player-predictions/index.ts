@@ -491,9 +491,10 @@ Deno.serve(async (req: Request) => {
         }
         settlementDiagnostics.stats_rows = actualRows.length;
         const actualMap = new Map<string, any>();
+        const normalizeId = (value: unknown) => String(value ?? "").trim().toLowerCase();
         for (const row of actualRows) {
           const parsed = normalizedStatRow(row.stats);
-          const key = `${row.game_id}:${row.player_id}`;
+          const key = `${normalizeId(row.game_id)}:${normalizeId(row.player_id)}`;
           // Rows are newest-first; retain one validated final boxscore per player/game.
           if (parsed && !actualMap.has(key)) actualMap.set(key, parsed);
         }
@@ -509,8 +510,11 @@ Deno.serve(async (req: Request) => {
         const evalRows: any[] = [];
         for (const prediction of saved ?? []) {
           if (existingEvalIds.has(prediction.id)) continue;
-          const forecast = prediction.forecast ?? {};
-          const actual = actualMap.get(`${prediction.game_id}:${forecast.player_id}`);
+          const rawForecast = prediction.forecast ?? {};
+          const forecast = typeof rawForecast === "string" ? JSON.parse(rawForecast) : rawForecast;
+          const matchGameId = normalizeId(prediction.game_id ?? forecast.game_id);
+          const matchPlayerId = normalizeId(forecast.player_id ?? forecast.playerId);
+          const actual = actualMap.get(`${matchGameId}:${matchPlayerId}`);
           if (!actual) continue; // DNP / missing validated boxscore: keep pending, never invent zeroes.
           settlementDiagnostics.forecasts_with_actual += 1;
           const fields = ["points", "rebounds", "assists", "threes", "minutes"];
