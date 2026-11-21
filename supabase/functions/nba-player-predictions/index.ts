@@ -6,13 +6,14 @@ const PUBLISHABLE_KEYS = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") ??
 const SERVICE_KEY = SECRET_KEYS.default ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PUBLIC_KEY = PUBLISHABLE_KEYS.default ?? Deno.env.get("SUPABASE_ANON_KEY");
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba";
-const MODEL_VERSION = "player-impact-top2-0.2";
+const MODEL_VERSION = "player-impact-top2-0.3";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "content-type": "application/json", "cache-control": "no-store" },
 });
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 const round = (value: number) => Number(value.toFixed(1));
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
 async function sha256(value: string) {
@@ -209,10 +210,10 @@ Deno.serve(async (req: Request) => {
       if (!modelVersionId) {
         const { data: created, error: createError } = await supabase.from("model_versions").insert({
           version_name: MODEL_VERSION,
-          feature_set_version: "player-starter-features-0.1",
-          model_description: "Proyecciones experimentales de los dos jugadores de mayor impacto por equipo, clasificados por producción estadística reciente y minutos; excluye jugadores con estado Out, Doubtful o Questionable en el informe ESPN.",
-          parameters: { method: "blend_last5_last10_60_40", min_games: 3, max_games: 10, team_player_limit: 2, ranking: "projected_points_rebounds_assists_threes_minutes", availability_gate: "exclude_out_doubtful_questionable", roster_source: "ESPN boxscore player pool" },
-          validation_metrics: { status: "not_yet_validated", note: "No promover sin backtest cronológico de jugadores." },
+          feature_set_version: "player-starter-features-0.2-error-feedback",
+          model_description: "Blend de últimos 5 y 10 partidos con corrección limitada por sesgo individual calculado solo desde pronósticos anteriores evaluados contra boxscores finales ESPN verificados.",
+          parameters: { method: "blend_last5_last10_60_40_with_verified_player_error_feedback", min_games: 3, max_games: 10, team_player_limit: 2, ranking: "projected_points_rebounds_assists_threes_minutes", availability_gate: "exclude_out_doubtful_questionable", roster_source: "ESPN boxscore player pool", error_feedback: { minimum_samples_per_player_stat: 8, shrinkage: 0.35, correction_caps: { points: 3, rebounds: 1.5, assists: 1.5, threes: 1, minutes: 3 }, source: "prediction_evaluations with ESPN final boxscore" } },
+          validation_metrics: { status: "not_yet_validated", note: "La corrección por errores es experimental; requiere al menos 30 evaluaciones y comparación pareada en la misma ventana antes de promoción." },
           status: "experimental",
         }).select("id").single();
         if (createError || !created) throw new Error("Could not register player model: " + (createError?.message ?? "missing row"));
@@ -220,6 +221,44 @@ Deno.serve(async (req: Request) => {
       }
 
       const activeModelId = modelVersionId ?? modelRows?.[0]?.id;
+
+      // Learn only from immutable forecasts already evaluated against verified ESPN final boxscores.
+      // Error sign is predicted - actual; subtracting the shrunk bias corrects systematic over/underprediction.
+      const playerErrorBias = new Map<string, Map<string, number[]>>();
+      if (persistRequested && activeModelId) {
+        const { data: priorPlayerPredictions, error: priorPredictionsError } = await supabase
+          .from("predictions").select("id,forecast").eq("prediction_type", "player")
+          .order("created_at", { ascending: false }).limit(1000);
+        if (priorPredictionsError) throw new Error("Prior player forecasts for error feedback failed: " + priorPredictionsError.message);
+        const priorIds = (priorPlayerPredictions ?? []).map((row: any) => row.id);
+        const evaluationsByPrediction = new Map<string, any>();
+        for (let offset = 0; offset < priorIds.length; offset += 100) {
+          const { data, error } = await supabase.from("prediction_evaluations")
+            .select("prediction_id,actual,result_source_names").in("prediction_id", priorIds.slice(offset, offset + 100));
+          if (error) throw new Error("Prior verified player evaluations lookup failed: " + error.message);
+          for (const row of data ?? []) evaluationsByPrediction.set(row.prediction_id, row);
+        }
+        for (const prediction of priorPlayerPredictions ?? []) {
+          const evaluation = evaluationsByPrediction.get(prediction.id);
+          const raw = prediction.forecast ?? {};
+          const forecast = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (forecast.model_type !== "experimental_player_rolling_blend") continue;
+          if (evaluation?.actual?.source !== "ESPN final boxscore" || !(evaluation.result_source_names ?? []).includes("espn")) continue;
+          const playerId = norm(forecast.player_id);
+          if (!playerId) continue;
+          if (!playerErrorBias.has(playerId)) playerErrorBias.set(playerId, new Map());
+          const stats = playerErrorBias.get(playerId)!;
+          for (const field of ["points", "rebounds", "assists", "threes", "minutes"]) {
+            const predicted = Number(forecast["predicted_" + field]);
+            const actual = Number(evaluation.actual[field]);
+            if (!Number.isFinite(predicted) || !Number.isFinite(actual)) continue;
+            const values = stats.get(field) ?? [];
+            values.push(predicted - actual);
+            stats.set(field, values.slice(-20));
+          }
+        }
+      }
+
       const candidates: any[] = [];
       const localPlayerByEspn = new Map<string, string>();
       const playerById = new Map<string, any>();
@@ -340,7 +379,19 @@ Deno.serve(async (req: Request) => {
           continue;
         }
         const recent5 = history.slice(0, 5);
-        const project = (key: string) => round(0.6 * mean(history.map((r: any) => r[key])) + 0.4 * mean(recent5.map((r: any) => r[key])));
+        const caps: Record<string, number> = { points: 3, rebounds: 1.5, assists: 1.5, threes: 1, minutes: 3 };
+        const playerErrors = playerErrorBias.get(playerId) ?? new Map<string, number[]>();
+        const feedbackCorrections: Record<string, number> = {};
+        const feedbackSamples: Record<string, number> = {};
+        for (const [field, cap] of Object.entries(caps)) {
+          const errors = playerErrors.get(field) ?? [];
+          feedbackSamples[field] = errors.length;
+          feedbackCorrections[field] = errors.length >= 8 ? round(clamp(mean(errors) * 0.35, -cap, cap)) : 0;
+        }
+        const project = (key: string) => {
+          const baseline = 0.6 * mean(history.map((r: any) => r[key])) + 0.4 * mean(recent5.map((r: any) => r[key]));
+          return round(Math.max(0, baseline - (feedbackCorrections[key] ?? 0)));
+        };
         const team = teamById.get(candidate.team_id) as any;
         const forecast = {
           game_id: candidate.game_id,
@@ -360,6 +411,7 @@ Deno.serve(async (req: Request) => {
           predicted_assists: project("assists"),
           predicted_threes: project("threes"),
           predicted_minutes: project("minutes"),
+          error_feedback: { source: "verified_prior_espn_evaluations", minimum_samples_per_stat: 8, shrinkage: 0.35, sample_counts: feedbackSamples, applied_corrections: feedbackCorrections },
           sample_games: history.length,
           recent5_sample: recent5.length,
           model_version: MODEL_VERSION,
