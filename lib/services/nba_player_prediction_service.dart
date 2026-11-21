@@ -88,7 +88,8 @@ class NbaPlayerPredictionService {
   Future<NbaPlayerPredictionData> load() async {
     final response = await Supabase.instance.client.functions.invoke(
       'nba-player-predictions',
-      body: const {'persist': true},
+      // The Android client is read-only; scheduled Supabase automation owns all writes.
+      body: const {'persist': false},
     );
     if (response.status < 200 || response.status >= 300) {
       throw Exception('El motor de jugadores respondió con código ${response.status}');

@@ -26,6 +26,13 @@ function valuesFromStats(stats: any): Record<string, unknown> {
     if (category?.values && typeof category.values === "object") Object.assign(values, category.values);
   }
   if (stats?.values && typeof stats.values === "object") Object.assign(values, stats.values);
+  // ESPN's persisted player_game_stats rows often store boxscore fields directly
+  // (MIN, PTS, REB, AST, 3PT), not under categories/values.
+  if (stats && typeof stats === "object" && !Array.isArray(stats)) {
+    for (const [key, value] of Object.entries(stats)) {
+      if ((typeof value === "string" || typeof value === "number") && !(key in values)) values[key] = value;
+    }
+  }
   return values;
 }
 
@@ -95,10 +102,25 @@ Deno.serve(async (req: Request) => {
   if (!PUBLIC_KEY || req.headers.get("apikey") !== PUBLIC_KEY) return json({ ok: false, error: "Unauthorized" }, 401);
   if (!SERVICE_KEY) return json({ ok: false, error: "Server database credentials are not configured" }, 500);
 
-  let persistRequested = false;
-  try { persistRequested = (await req.json())?.persist === true; } catch { /* read-only default */ }
-
   const supabase = createClient(PROJECT_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  let requestBody: any = {};
+  try { requestBody = await req.json(); } catch { /* empty body is read-only */ }
+  const requested = requestBody?.persist === true;
+  let persistRequested = false;
+  if (requested) {
+    const automationToken = req.headers.get("x-automation-token") ?? "";
+    const automationHash = automationToken ? await sha256(automationToken) : "";
+    const { data: automationRecord, error: automationError } = await supabase
+      .from("internal_automation_tokens").select("token_hash").eq("name", "nba-slate-gate").maybeSingle();
+    if (automationError) {
+      return json({ ok: false, error: "Could not validate server automation authorization." }, 503);
+    }
+    const automationAuthorized = !!automationRecord?.token_hash && automationHash === automationRecord.token_hash;
+    if (!automationAuthorized) {
+      return json({ ok: false, error: "Persistence is restricted to authorized server automation." }, 403);
+    }
+    persistRequested = true;
+  }
   try {
     const now = new Date();
     const nowIso = now.toISOString();
@@ -127,11 +149,8 @@ Deno.serve(async (req: Request) => {
 
     const teamIds = [...new Set(slateGames.flatMap((g: any) => [g.home_team_id, g.away_team_id]))];
     const gameIds = slateGames.map((g: any) => g.id);
-    if (!gameIds.length) return json({
-      ok: true, model: { version: MODEL_VERSION, status: "experimental" },
-      slate_date: null, slate_status: slateStatus, player_forecasts: [], skipped: [],
-      meta: { games_checked: 0, player_forecasts: 0, predictions_persisted: 0, predictions_evaluated: 0 },
-    });
+    // Do not return early when there is no upcoming slate: pending player
+    // forecasts from recently completed games must still be settled below.
 
     const [{ data: teamMappings, error: teamMapError }, { data: modelRows, error: modelError }] = await Promise.all([
       supabase.from("team_source_ids").select("team_id,source_team_id").eq("source_name", "espn").in("team_id", teamIds),
@@ -455,18 +474,25 @@ Deno.serve(async (req: Request) => {
           .select("id,game_id,forecast").in("game_id", recentFinalIds).eq("prediction_type", "player");
         if (savedError) throw new Error("Player predictions for evaluation failed: " + savedError.message);
         const actualRows: any[] = [];
-        for (let offset = 0; offset < recentFinalIds.length; offset += 100) {
+        // Query only games that actually have saved player forecasts. This avoids
+        // losing matches when a large recent-final slate is paged independently.
+        const savedGameIds = [...new Set((saved ?? []).map((p: any) => p.game_id).filter(Boolean))];
+        for (let offset = 0; offset < savedGameIds.length; offset += 100) {
           const { data, error } = await supabase.from("player_game_stats")
-            .select("game_id,player_id,stats,validation_status")
-            .in("game_id", recentFinalIds.slice(offset, offset + 100))
-            .neq("validation_status", "rejected");
+            .select("game_id,player_id,stats,validation_status,captured_at")
+            .in("game_id", savedGameIds.slice(offset, offset + 100))
+            .eq("validation_status", "validated")
+            .order("captured_at", { ascending: false });
           if (error) throw new Error("Final player boxscores lookup failed: " + error.message);
           actualRows.push(...(data ?? []));
         }
         const actualMap = new Map<string, any>();
+        const normalizeId = (value: unknown) => String(value ?? "").trim().toLowerCase();
         for (const row of actualRows) {
           const parsed = normalizedStatRow(row.stats);
-          if (parsed) actualMap.set(`${row.game_id}:${row.player_id}`, parsed);
+          const key = `${normalizeId(row.game_id)}:${normalizeId(row.player_id)}`;
+          // Rows are newest-first; retain one validated final boxscore per player/game.
+          if (parsed && !actualMap.has(key)) actualMap.set(key, parsed);
         }
         const savedIds = (saved ?? []).map((p: any) => p.id);
         const existingEvalIds = new Set<string>();
@@ -479,8 +505,11 @@ Deno.serve(async (req: Request) => {
         const evalRows: any[] = [];
         for (const prediction of saved ?? []) {
           if (existingEvalIds.has(prediction.id)) continue;
-          const forecast = prediction.forecast ?? {};
-          const actual = actualMap.get(`${prediction.game_id}:${forecast.player_id}`);
+          const rawForecast = prediction.forecast ?? {};
+          const forecast = typeof rawForecast === "string" ? JSON.parse(rawForecast) : rawForecast;
+          const matchGameId = normalizeId(prediction.game_id ?? forecast.game_id);
+          const matchPlayerId = normalizeId(forecast.player_id ?? forecast.playerId);
+          const actual = actualMap.get(`${matchGameId}:${matchPlayerId}`);
           if (!actual) continue; // DNP / missing validated boxscore: keep pending, never invent zeroes.
           const fields = ["points", "rebounds", "assists", "threes", "minutes"];
           const errorMetrics: Record<string, number> = {};
