@@ -466,6 +466,7 @@ Deno.serve(async (req: Request) => {
       final_games: 0, saved_forecasts: 0, stats_rows: 0, normalized_stats: 0,
       forecasts_with_actual: 0, evaluation_rows: 0, inserted_evaluations: 0,
     };
+    const settlementKeySamples: Record<string, unknown> = { saved: [], actual: [] };
     if (persistRequested) {
       const settlementFrom = new Date(now.getTime() - 14 * 86400000).toISOString();
       const { data: recentFinalGames, error: finalGamesError } = await supabase.from("games")
