@@ -509,11 +509,12 @@ Deno.serve(async (req: Request) => {
           if (error) throw new Error("Existing player evaluations lookup failed: " + error.message);
           for (const row of data ?? []) existingEvalIds.add(row.prediction_id);
         }
-        settlementKeySamples.saved = (saved ?? []).slice(0, 5).map((p: any) => ({
-          game_id: p.game_id,
-          player_id: p.forecast?.player_id,
-          forecast_is_string: typeof p.forecast === "string",
-        }));
+        settlementKeySamples.saved = (saved ?? []).slice(0, 5).map((p: any) => {
+          const raw = p.forecast ?? {};
+          const f = typeof raw === "string" ? JSON.parse(raw) : raw;
+          const key = `${normalizeId(p.game_id ?? f.game_id)}:${normalizeId(f.player_id ?? f.playerId)}`;
+          return { key, has_actual: actualMap.has(key), game_id: p.game_id, player_id: f.player_id };
+        });
         const evalRows: any[] = [];
         for (const prediction of saved ?? []) {
           if (existingEvalIds.has(prediction.id)) continue;
