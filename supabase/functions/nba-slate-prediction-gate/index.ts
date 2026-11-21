@@ -24,20 +24,19 @@ Deno.serve(async(req:Request)=>{
   const ids=(games??[]).map((g:any)=>g.id),finals=new Set<string>();
   for(let i=0;i<ids.length;i+=100){const {data,error}=await db.from("game_results").select("game_id,home_score,away_score,is_final").in("game_id",ids.slice(i,i+100)).eq("is_final",true);if(error)throw error;for(const r of data??[])if(Number.isFinite(Number(r.home_score))&&Number.isFinite(Number(r.away_score))&&Number(r.home_score)>=0&&Number(r.away_score)>=0&&Number(r.home_score)!==Number(r.away_score))finals.add(r.game_id);}
   const slates=[...grouped.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,rows])=>({date,total:rows.length,finalized:rows.filter((g:any)=>g.status==="final"&&finals.has(g.id)).length,all_final:rows.length>0&&rows.every((g:any)=>g.status==="final"&&finals.has(g.id)),rows}));
-  const previous=slates.filter(s=>s.date<=dateKey(nowIso)).at(-1)??null;
-  const open=!!previous&&previous.all_final;
-  const next=open?slates.find(s=>s.date>previous.date&&s.rows.every((g:any)=>g.status==="scheduled")):null;
-  const slateId=next?.rows.map((g:any)=>g.id)??[];
-  let calls:any[]=[];
-  if(open&&next&&slateId.length){
-    // Call existing generators only when the previous slate is fully settled; their immutable/upsert logic remains intact.
-    for(const slug of ["nba-predictions","nba-player-predictions"]){
-      const resp=await fetch(PROJECT_URL+"/functions/v1/"+slug,{method:"POST",headers:{"Content-Type":"application/json","apikey":PUBLIC_KEY,"Authorization":`Bearer ${SERVICE_KEY}`},body:JSON.stringify({persist:true,trigger:"slate_gate",gate_slate_date:next.date,previous_slate_date:previous.date,requested_at:nowIso})});
-      let body:any;try{body=await resp.json();}catch{body={text:await resp.text()};}
-      calls.push({function:slug,http_status:resp.status,ok:resp.ok,result:body});
-      if(!resp.ok)break;
-    }
+  // Run the two server-owned prediction pipelines on every tick. Each engine
+  // independently blocks new forecasts once its earliest NBA slate has started,
+  // but still settles any newly-final games. This prevents player evaluations
+  // from waiting until the following slate is fully completed.
+  const current=slates.find(s=>s.rows.some((g:any)=>g.status!=="final"))??null;
+  const completed=slates.filter(s=>s.date<=dateKey(nowIso)&&s.all_final).at(-1)??null;
+  const calls:any[]=[];
+  for(const slug of ["nba-predictions","nba-player-predictions"]){
+    const resp=await fetch(PROJECT_URL+"/functions/v1/"+slug,{method:"POST",headers:{"Content-Type":"application/json","apikey":PUBLIC_KEY,"Authorization":`Bearer ${SERVICE_KEY}`},body:JSON.stringify({persist:true,trigger:"scheduled_settlement_and_forecast",requested_at:nowIso})});
+    let body:any;try{body=await resp.json();}catch{body={text:await resp.text()};}
+    calls.push({function:slug,http_status:resp.status,ok:resp.ok,result:body});
+    if(!resp.ok)break;
   }
-  return json({ok:true,mode:"slate_gate_and_trigger",checked_at:nowIso,timezone:"America/New_York",gate_open:open,completed_slate:previous?{date:previous.date,total:previous.rows.length,finalized:previous.finalized}:null,triggered_slate:next?{date:next.date,game_count:next.rows.length}:null,calls,reason:!previous?"no_completed/current slate":!open?"previous slate not fully settled":!next?"no next scheduled slate":"gate_passed"});
+  return json({ok:calls.every(c=>c.ok),mode:"scheduled_settlement_and_forecast",checked_at:nowIso,timezone:"America/New_York",current_slate:current?{date:current.date,total:current.rows.length,finalized:current.finalized}:null,last_completed_slate:completed?{date:completed.date,total:completed.rows.length}:null,calls,reason:"both engines settle final results every cycle and only generate forecasts for a not-yet-started slate"});
  }catch(e){return json({ok:false,error:e instanceof Error?e.message:String(e)},502);}
 });
