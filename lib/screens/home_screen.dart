@@ -49,7 +49,8 @@ class _BasketballLogoPainter extends CustomPainter {
 class HomeScreen extends StatefulWidget {
   final int themeIndex;
   final ValueChanged<int> onThemeChanged;
-  const HomeScreen({super.key, this.themeIndex = 0, this.onThemeChanged = _ignoreThemeChange});
+  final bool enableLivePolling;
+  const HomeScreen({super.key, this.themeIndex = 0, this.onThemeChanged = _ignoreThemeChange, this.enableLivePolling = true});
 
   static void _ignoreThemeChange(int value) {}
   @override
@@ -105,7 +106,9 @@ class _HomeScreenState extends State<HomeScreen> {
     refreshNbaData();
     refreshPredictions();
     refreshPlayerPredictions();
-    _liveScoreTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshLiveScores());
+    if (widget.enableLivePolling) {
+      _liveScoreTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshLiveScores());
+    }
   }
 
   Future<void> _refreshLiveScores() async {
