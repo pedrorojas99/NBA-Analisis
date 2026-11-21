@@ -167,6 +167,16 @@ Deno.serve(async (req: Request) => {
       if (nbaTeamsError) throw new Error("NBA team catalog query failed: " + nbaTeamsError.message);
       const nbaTeamIds = (nbaTeams ?? []).map((team: any) => team.id);
       if (!nbaTeamIds.length) throw new Error("No official NBA teams are configured.");
+      // Exclude special-event games even when one of their participants is an NBA franchise.
+      const specialGameIds = new Set<string>();
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error: specialGamesError } = await supabase.from("games")
+          .select("id").eq("is_special_event", true)
+          .order("id", { ascending: true }).range(offset, offset + 999);
+        if (specialGamesError) throw new Error("Special-event exclusion query failed: " + specialGamesError.message);
+        for (const game of data ?? []) specialGameIds.add(game.id);
+        if (!data || data.length < 1000) break;
+      }
       // PostgREST may cap responses at 1,000 rows even when a larger limit is requested.
       // Page through the full eligible stats index so players beyond the first page are not omitted.
       const statIndex: any[] = [];
@@ -184,6 +194,7 @@ Deno.serve(async (req: Request) => {
       }
       const gameSets = new Map<string, Set<string>>();
       for (const row of statIndex ?? []) {
+        if (specialGameIds.has(row.game_id)) continue;
         if (!gameSets.has(row.player_id)) gameSets.set(row.player_id, new Set());
         gameSets.get(row.player_id)!.add(row.game_id);
       }
@@ -230,7 +241,8 @@ Deno.serve(async (req: Request) => {
         if (teamError) throw new Error("Player teams query failed: " + teamError.message);
         const gameById = new Map((gameRows ?? []).map((g: any) => [g.id, g]));
         const teamById = new Map((teamRows ?? []).map((t: any) => [t.id, t]));
-        playerGamesOut = [...uniqueRows.values()].map((row: any) => {
+        // Keep the selected player's detail rows aligned with the regular-season catalog above.
+        playerGamesOut = [...uniqueRows.values()].filter((row: any) => gameById.has(row.game_id)).map((row: any) => {
           const game = gameById.get(row.game_id);
           const team = teamById.get(row.team_id);
           const opponentId = game
