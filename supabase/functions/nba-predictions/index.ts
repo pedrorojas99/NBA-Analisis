@@ -67,7 +67,12 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const requested = body?.persist === true;
-    const automationAuthorized = req.headers.get("authorization") === `Bearer ${SERVICE_KEY}`;
+    const automationToken = req.headers.get("x-automation-token") ?? "";
+    const automationHash = automationToken ? await sha256(automationToken) : "";
+    const { data: automationRecord, error: automationError } = await supabase
+      .from("internal_automation_tokens").select("token_hash").eq("name", "nba-slate-gate").maybeSingle();
+    const automationAuthorized = !automationError && !!automationRecord?.token_hash &&
+      automationHash === automationRecord.token_hash;
     if (requested && !automationAuthorized) {
       return json({ ok: false, error: "Persistence is restricted to authorized server automation." }, 403);
     }
